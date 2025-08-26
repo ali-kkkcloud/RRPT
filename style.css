@@ -424,6 +424,8 @@ tbody tr:hover {
     display: flex;
     justify-content: flex-end;
     gap: 1rem;
+    background: #f8f9fa;
+    border-radius: 0 0 12px 12px;
 }
 
 /* Loading Styles */
