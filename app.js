@@ -1,4 +1,4 @@
-// Simple Configuration
+// Configuration
 const CONFIG = {
     supabase: {
         url: 'https://vnrqlcfcnxefbjakbozh.supabase.co',
@@ -22,7 +22,7 @@ let charts = {};
 
 // Initialize application
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Dashboard loading...');
+    console.log('Initializing dashboard...');
     initializeSupabase();
     setupEventListeners();
     updateLastUpdated();
@@ -35,9 +35,11 @@ function initializeSupabase() {
         if (typeof supabase !== 'undefined') {
             supabaseClient = supabase.createClient(CONFIG.supabase.url, CONFIG.supabase.key);
             console.log('Supabase initialized');
+        } else {
+            console.warn('Supabase not available');
         }
     } catch (error) {
-        console.error('Supabase error:', error);
+        console.error('Supabase initialization error:', error);
     }
 }
 
@@ -50,14 +52,20 @@ function setupEventListeners() {
 
     // Date selector
     document.getElementById('date-select').addEventListener('change', function() {
+        console.log('Date changed to:', this.value);
         loadDateBasedData(this.value);
     });
 
-    // Buttons
-    document.getElementById('refresh-btn').addEventListener('click', loadAllData);
+    // Refresh button
+    document.getElementById('refresh-btn').addEventListener('click', function() {
+        console.log('Refresh clicked');
+        loadAllData();
+    });
+
+    // Export button
     document.getElementById('export-btn').addEventListener('click', exportData);
 
-    // Modal
+    // Modal events
     setupModalEvents();
 }
 
@@ -68,21 +76,26 @@ function setupModalEvents() {
     const cancelBtn = document.getElementById('cancel-status');
     const saveBtn = document.getElementById('save-status');
 
-    closeBtn.addEventListener('click', closeModal);
-    cancelBtn.addEventListener('click', closeModal);
-    saveBtn.addEventListener('click', saveVehicleStatus);
+    closeBtn.addEventListener('click', () => closeModal());
+    cancelBtn.addEventListener('click', () => closeModal());
+    saveBtn.addEventListener('click', () => saveVehicleStatus());
 
     window.addEventListener('click', (e) => {
         if (e.target === modal) closeModal();
     });
 }
 
-// Switch tabs
+// Switch between tabs
 function switchTab(tabName) {
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    console.log('Switching to tab:', tabName);
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
     document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
 
-    document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(pane => {
+        pane.classList.remove('active');
+    });
     document.getElementById(tabName).classList.add('active');
 }
 
@@ -103,8 +116,10 @@ async function loadAllData() {
     updateLastUpdated();
     
     try {
+        // Load data with sample fallback
         await loadOfflineData();
         await loadDateBasedData(document.getElementById('date-select').value);
+        
         console.log('Data loaded successfully');
     } catch (error) {
         console.error('Error loading data:', error);
@@ -113,27 +128,156 @@ async function loadAllData() {
     }
 }
 
-// Load offline data
+// Load offline reports data
 async function loadOfflineData() {
     console.log('Loading offline data...');
     
-    // Use sample data for now to ensure it works
-    currentData.offline = [
-        { 'client': 'G4S', 'Vehicle Number': 'AP39HS4926', 'Last Online': '2025-08-20', 'Offline Since (hrs)': '112', 'Remarks': 'Parked at depot' },
-        { 'client': 'G4S', 'Vehicle Number': 'AS01EH6877', 'Last Online': '2025-05-12', 'Offline Since (hrs)': '2515', 'Remarks': 'Under maintenance' },
-        { 'client': 'G4S', 'Vehicle Number': 'BR01PK9758', 'Last Online': '2025-08-23', 'Offline Since (hrs)': '52', 'Remarks': 'Driver sick leave' },
-        { 'client': 'G4S', 'Vehicle Number': 'CG04MY9667', 'Last Online': '2025-05-09', 'Offline Since (hrs)': '2586', 'Remarks': 'GPS connectivity issue' },
-        { 'client': 'G4S', 'Vehicle Number': 'CH01CK2912', 'Last Online': '2025-08-25', 'Offline Since (hrs)': '48', 'Remarks': 'Technical checkup' }
-    ];
+    try {
+        // Try multiple methods to fetch live data
+        const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.offline}/export?format=csv&gid=0`;
+        let csvText = null;
+        
+        // Method 1: Direct fetch
+        try {
+            console.log('Method 1: Direct fetch from:', csvUrl);
+            const response = await fetch(csvUrl);
+            if (response.ok) {
+                csvText = await response.text();
+                console.log('Direct fetch successful, data length:', csvText.length);
+            }
+        } catch (error) {
+            console.log('Direct fetch failed:', error.message);
+        }
+        
+        // Method 2: CORS proxy if direct fails
+        if (!csvText) {
+            try {
+                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(csvUrl)}`;
+                console.log('Method 2: Proxy fetch from:', proxyUrl);
+                const response = await fetch(proxyUrl);
+                if (response.ok) {
+                    const data = await response.json();
+                    csvText = data.contents;
+                    console.log('Proxy fetch successful, data length:', csvText.length);
+                }
+            } catch (error) {
+                console.log('Proxy fetch failed:', error.message);
+            }
+        }
+        
+        if (csvText) {
+            const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+            console.log('Parsed data:', parsed.data.length, 'rows');
+            
+            // Filter G4S vehicles offline >= 24 hours
+            const filteredData = parsed.data.filter(row => {
+                const client = row.client?.toLowerCase() || '';
+                const offlineHours = parseFloat(row['Offline Since (hrs)']) || 0;
+                return client.includes('g4s') && offlineHours >= 24 && row['Vehicle Number'];
+            });
+            
+            if (filteredData.length > 0) {
+                console.log('LIVE DATA LOADED:', filteredData.length, 'vehicles');
+                currentData.offline = filteredData;
+                updateOfflineUI();
+                return;
+            }
+        }
+    } catch (error) {
+        console.log('All methods failed:', error.message);
+    }
     
+    // Fallback to sample data only if live data fails
+    console.log('Using sample data as fallback');
+    currentData.offline = [
+        { 'client': 'G4S', 'Vehicle Number': 'AP39HS4926', 'Last Online': '2025-08-20', 'Offline Since (hrs)': '112', 'R/N': '', 'Remarks': 'Parked at depot' },
+        { 'client': 'G4S', 'Vehicle Number': 'AS01EH6877', 'Last Online': '2025-05-12', 'Offline Since (hrs)': '2515', 'R/N': '', 'Remarks': 'Under maintenance' },
+        { 'client': 'G4S', 'Vehicle Number': 'BR01PK9758', 'Last Online': '2025-08-23', 'Offline Since (hrs)': '52', 'R/N': '', 'Remarks': 'Driver sick leave' },
+        { 'client': 'G4S', 'Vehicle Number': 'CG04MY9667', 'Last Online': '2025-05-09', 'Offline Since (hrs)': '2586', 'R/N': '', 'Remarks': 'GPS connectivity issue' },
+        { 'client': 'G4S', 'Vehicle Number': 'CH01CK2912', 'Last Online': '2025-08-25', 'Offline Since (hrs)': '48', 'R/N': '', 'Remarks': 'Technical checkup pending' }
+    ];
     updateOfflineUI();
 }
 
 // Load date-based data
 async function loadDateBasedData(selectedDate) {
     console.log('Loading data for date:', selectedDate);
+    await Promise.all([
+        loadSpeedData(selectedDate),
+        loadAIAlertsData(selectedDate)
+    ]);
+}
+
+// Load speed data
+async function loadSpeedData(date) {
+    console.log('Loading speed data for:', date);
     
-    // Load speed data
+    try {
+        const gidMap = {
+            '25 August': '293366971',
+            '24 August': '0',
+            '23 August': '1'
+        };
+        
+        const gid = gidMap[date] || '293366971';
+        const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.speed}/export?format=csv&gid=${gid}`;
+        let csvText = null;
+        
+        // Method 1: Direct fetch
+        try {
+            console.log('Speed Method 1: Direct fetch from:', csvUrl);
+            const response = await fetch(csvUrl);
+            if (response.ok) {
+                csvText = await response.text();
+                console.log('Speed direct fetch successful, data length:', csvText.length);
+            }
+        } catch (error) {
+            console.log('Speed direct fetch failed:', error.message);
+        }
+        
+        // Method 2: CORS proxy if direct fails
+        if (!csvText) {
+            try {
+                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(csvUrl)}`;
+                console.log('Speed Method 2: Proxy fetch from:', proxyUrl);
+                const response = await fetch(proxyUrl);
+                if (response.ok) {
+                    const data = await response.json();
+                    csvText = data.contents;
+                    console.log('Speed proxy fetch successful, data length:', csvText.length);
+                }
+            } catch (error) {
+                console.log('Speed proxy fetch failed:', error.message);
+            }
+        }
+        
+        if (csvText) {
+            const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+            console.log('Speed parsed data:', parsed.data.length, 'rows');
+            
+            const filteredData = parsed.data.filter(row => {
+                const speed = parseFloat(row['Speed(Km/h)']) || 0;
+                return speed >= 75 && row['Plate NO.'];
+            }).map(row => ({
+                plateNo: row['Plate NO.'] || '',
+                company: row['Company'] || '',
+                startingTime: row['Starting time'] || '',
+                speed: parseFloat(row['Speed(Km/h)']) || 0
+            }));
+            
+            if (filteredData.length > 0) {
+                console.log('LIVE SPEED DATA LOADED:', filteredData.length, 'violations');
+                currentData.speed = filteredData;
+                updateSpeedUI();
+                return;
+            }
+        }
+    } catch (error) {
+        console.log('Speed data loading failed:', error.message);
+    }
+    
+    // Fallback to sample data
+    console.log('Using sample speed data');
     currentData.speed = [
         { plateNo: 'HR63F2958', company: 'North', startingTime: '05:58:13', speed: 94.5 },
         { plateNo: 'TS08HC6654', company: 'South', startingTime: '16:46:15', speed: 92.9 },
@@ -142,8 +286,79 @@ async function loadDateBasedData(selectedDate) {
         { plateNo: 'HR63F2958', company: 'North', startingTime: '07:54:47', speed: 95.1 },
         { plateNo: 'TS08HC6654', company: 'South', startingTime: '12:40:42', speed: 77.5 }
     ];
+    updateSpeedUI();
+}
+
+// Load AI alerts data
+async function loadAIAlertsData(date) {
+    console.log('Loading AI alerts data for:', date);
     
-    // Load alerts data
+    try {
+        const gidMap = {
+            '25 August': '1378822335',
+            '24 August': '0',
+            '23 August': '1'
+        };
+        
+        const gid = gidMap[date] || '1378822335';
+        const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.alerts}/export?format=csv&gid=${gid}`;
+        let csvText = null;
+        
+        // Method 1: Direct fetch
+        try {
+            console.log('Alerts Method 1: Direct fetch from:', csvUrl);
+            const response = await fetch(csvUrl);
+            if (response.ok) {
+                csvText = await response.text();
+                console.log('Alerts direct fetch successful, data length:', csvText.length);
+            }
+        } catch (error) {
+            console.log('Alerts direct fetch failed:', error.message);
+        }
+        
+        // Method 2: CORS proxy if direct fails
+        if (!csvText) {
+            try {
+                const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(csvUrl)}`;
+                console.log('Alerts Method 2: Proxy fetch from:', proxyUrl);
+                const response = await fetch(proxyUrl);
+                if (response.ok) {
+                    const data = await response.json();
+                    csvText = data.contents;
+                    console.log('Alerts proxy fetch successful, data length:', csvText.length);
+                }
+            } catch (error) {
+                console.log('Alerts proxy fetch failed:', error.message);
+            }
+        }
+        
+        if (csvText) {
+            const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+            console.log('Alerts parsed data:', parsed.data.length, 'rows');
+            
+            const filteredData = parsed.data.filter(row => {
+                return row['Plate NO.'] && row['Alarm Type'];
+            }).map(row => ({
+                plateNo: row['Plate NO.'] || '',
+                company: row['Company'] || '',
+                alarmType: row['Alarm Type'] || '',
+                startingTime: row['Starting time'] || '',
+                imageLink: row['Image Link'] || ''
+            }));
+            
+            if (filteredData.length > 0) {
+                console.log('LIVE ALERTS DATA LOADED:', filteredData.length, 'alerts');
+                currentData.alerts = filteredData;
+                updateAIAlertsUI();
+                return;
+            }
+        }
+    } catch (error) {
+        console.log('Alerts data loading failed:', error.message);
+    }
+    
+    // Fallback to sample data
+    console.log('Using sample alerts data');
     currentData.alerts = [
         { plateNo: 'HR47G5244', company: 'North', alarmType: 'Distracted Driving Alarm Level One', startingTime: '08:30:07', imageLink: 'https://drive.google.com/file/d/1qd6w' },
         { plateNo: 'HR55AX4712', company: 'North', alarmType: 'Call Alarm Level One', startingTime: '16:09:09', imageLink: 'https://drive.google.com/file/d/1wjn' },
@@ -151,23 +366,24 @@ async function loadDateBasedData(selectedDate) {
         { plateNo: 'HR63F2958', company: 'North', alarmType: 'Unfastened Seat Belt Level One', startingTime: '08:31:05', imageLink: '' },
         { plateNo: 'HR47G5244', company: 'North', alarmType: 'Distracted Driving Alarm Level One', startingTime: '11:19:28', imageLink: 'https://drive.google.com/file/d/1wD0' }
     ];
-    
-    updateSpeedUI();
     updateAIAlertsUI();
 }
 
-// Update offline UI
-function updateOfflineUI() {
+// Update offline reports UI
+async function updateOfflineUI() {
     const data = currentData.offline;
-    console.log('Updating offline UI with', data.length, 'records');
+    console.log('Updating offline UI with', data.length, 'vehicles');
     
     // Update summary cards
     document.getElementById('total-offline').textContent = data.length;
-    document.getElementById('parking-count').textContent = '2';
-    document.getElementById('technical-count').textContent = '3';
     
+    // Calculate averages
     const avgOffline = data.length > 0 ? Math.round(data.reduce((sum, item) => sum + parseFloat(item['Offline Since (hrs)']), 0) / data.length) : 0;
     document.getElementById('avg-offline').textContent = avgOffline + 'h';
+    
+    // Default values for other cards
+    document.getElementById('parking-count').textContent = '2';
+    document.getElementById('technical-count').textContent = '1';
     
     // Update table
     updateOfflineTable(data);
@@ -184,8 +400,8 @@ function updateOfflineTable(data) {
     data.forEach(vehicle => {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${vehicle['Vehicle Number']}</td>
-            <td>${vehicle['Last Online']}</td>
+            <td>${vehicle['Vehicle Number'] || ''}</td>
+            <td>${vehicle['Last Online'] || ''}</td>
             <td><span class="status-badge status-offline">${vehicle['Offline Since (hrs)']}h</span></td>
             <td><span class="status-badge status-offline" id="status-${vehicle['Vehicle Number']}">🔴 Offline</span></td>
             <td>${vehicle['Remarks'] || '-'}</td>
@@ -201,7 +417,7 @@ function updateOfflineTable(data) {
 
 // Update offline charts
 function updateOfflineCharts(data) {
-    // Status pie chart
+    // Status distribution pie chart
     const statusCtx = document.getElementById('status-pie-chart').getContext('2d');
     if (charts.statusPie) charts.statusPie.destroy();
     
@@ -210,22 +426,23 @@ function updateOfflineCharts(data) {
         data: {
             labels: ['Offline', 'Parking/Garage', 'Technical Issue'],
             datasets: [{
-                data: [data.length - 2, 2, 3],
+                data: [data.length - 3, 2, 1],
                 backgroundColor: ['#ef4444', '#3b82f6', '#f59e0b']
             }]
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             plugins: { legend: { position: 'bottom' } }
         }
     });
     
-    // Region bar chart
+    // Regional distribution bar chart
     const regionCtx = document.getElementById('region-bar-chart').getContext('2d');
     if (charts.regionBar) charts.regionBar.destroy();
     
     const regionData = data.reduce((acc, item) => {
-        const region = item['Vehicle Number'].substring(0, 2);
+        const region = item['Vehicle Number']?.substring(0, 2) || 'Unknown';
         acc[region] = (acc[region] || 0) + 1;
         return acc;
     }, {});
@@ -242,6 +459,7 @@ function updateOfflineCharts(data) {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: { y: { beginAtZero: true } }
         }
@@ -251,12 +469,12 @@ function updateOfflineCharts(data) {
 // Update speed UI
 function updateSpeedUI() {
     const data = currentData.speed;
-    console.log('Updating speed UI with', data.length, 'records');
+    console.log('Updating speed UI with', data.length, 'violations');
     
     const totalViolations = data.length;
     const warnings = data.filter(item => item.speed >= 75 && item.speed < 90).length;
     const alarms = data.filter(item => item.speed >= 90).length;
-    const maxSpeed = Math.max(...data.map(item => item.speed));
+    const maxSpeed = data.length > 0 ? Math.max(...data.map(item => item.speed)) : 0;
     
     document.getElementById('total-violations').textContent = totalViolations;
     document.getElementById('warning-count').textContent = warnings;
@@ -284,23 +502,24 @@ function updateSpeedTable(data) {
         return acc;
     }, {});
     
-    Object.values(vehicleStats).forEach(vehicle => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${vehicle.vehicle}</td>
-            <td>${vehicle.company}</td>
-            <td><span class="status-badge ${vehicle.maxSpeed >= 90 ? 'status-offline' : 'status-technical'}">${vehicle.maxSpeed.toFixed(1)} km/h</span></td>
-            <td><span class="status-badge status-technical">${vehicle.warnings}</span></td>
-            <td><span class="status-badge status-offline">${vehicle.alarms}</span></td>
-            <td><span class="status-badge">${vehicle.total}</span></td>
-        `;
-        tbody.appendChild(row);
-    });
+    Object.values(vehicleStats)
+        .sort((a, b) => b.total - a.total)
+        .forEach(vehicle => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${vehicle.vehicle}</td>
+                <td>${vehicle.company}</td>
+                <td><span class="status-badge ${vehicle.maxSpeed >= 90 ? 'status-offline' : 'status-technical'}">${vehicle.maxSpeed.toFixed(1)} km/h</span></td>
+                <td><span class="status-badge status-technical">${vehicle.warnings}</span></td>
+                <td><span class="status-badge status-offline">${vehicle.alarms}</span></td>
+                <td><span class="status-badge">${vehicle.total}</span></td>
+            `;
+            tbody.appendChild(row);
+        });
 }
 
 // Update speed charts
 function updateSpeedCharts(data) {
-    // Vehicle violations bar chart
     const vehicleViolationsCtx = document.getElementById('speed-violations-chart').getContext('2d');
     if (charts.speedViolations) charts.speedViolations.destroy();
     
@@ -309,7 +528,9 @@ function updateSpeedCharts(data) {
         return acc;
     }, {});
     
-    const topVehicles = Object.entries(vehicleStats).slice(0, 10);
+    const topVehicles = Object.entries(vehicleStats)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10);
     
     charts.speedViolations = new Chart(vehicleViolationsCtx, {
         type: 'bar',
@@ -323,12 +544,12 @@ function updateSpeedCharts(data) {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: { y: { beginAtZero: true } }
         }
     });
     
-    // Speed category pie chart
     const speedCategoryCtx = document.getElementById('speed-category-chart').getContext('2d');
     if (charts.speedCategory) charts.speedCategory.destroy();
     
@@ -346,6 +567,7 @@ function updateSpeedCharts(data) {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             plugins: { legend: { position: 'bottom' } }
         }
     });
@@ -354,7 +576,7 @@ function updateSpeedCharts(data) {
 // Update AI alerts UI
 function updateAIAlertsUI() {
     const data = currentData.alerts;
-    console.log('Updating AI alerts UI with', data.length, 'records');
+    console.log('Updating AI alerts UI with', data.length, 'alerts');
     
     const totalAlerts = data.length;
     const uniqueVehicles = new Set(data.map(alert => alert.plateNo)).size;
@@ -364,7 +586,8 @@ function updateAIAlertsUI() {
         return acc;
     }, {});
     
-    const topVehicle = Object.entries(vehicleAlerts).sort((a, b) => b[1] - a[1])[0];
+    const topVehicle = Object.entries(vehicleAlerts)
+        .sort((a, b) => b[1] - a[1])[0];
     
     document.getElementById('total-alerts').textContent = totalAlerts;
     document.getElementById('unique-vehicles-alerts').textContent = uniqueVehicles;
@@ -399,7 +622,6 @@ function updateAIAlertsTable(data) {
 
 // Update AI alerts charts
 function updateAIAlertsCharts(data) {
-    // Vehicle alerts bar chart
     const vehicleAlertsCtx = document.getElementById('vehicle-alerts-chart').getContext('2d');
     if (charts.vehicleAlerts) charts.vehicleAlerts.destroy();
     
@@ -408,7 +630,9 @@ function updateAIAlertsCharts(data) {
         return acc;
     }, {});
     
-    const topVehicles = Object.entries(vehicleStats).slice(0, 10);
+    const topVehicles = Object.entries(vehicleStats)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10);
     
     charts.vehicleAlerts = new Chart(vehicleAlertsCtx, {
         type: 'bar',
@@ -422,12 +646,12 @@ function updateAIAlertsCharts(data) {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: { y: { beginAtZero: true } }
         }
     });
     
-    // Alert type pie chart
     const alertTypeCtx = document.getElementById('alert-type-chart').getContext('2d');
     if (charts.alertType) charts.alertType.destroy();
     
@@ -436,20 +660,24 @@ function updateAIAlertsCharts(data) {
         return acc;
     }, {});
     
-    const colors = ['#ef4444', '#f59e0b', '#8b5cf6', '#ec4899', '#6b7280'];
-    
     charts.alertType = new Chart(alertTypeCtx, {
         type: 'pie',
         data: {
             labels: Object.keys(alertTypes),
             datasets: [{
                 data: Object.values(alertTypes),
-                backgroundColor: colors
+                backgroundColor: ['#ef4444', '#f59e0b', '#8b5cf6', '#ec4899', '#6b7280']
             }]
         },
         options: {
             responsive: true,
-            plugins: { legend: { position: 'bottom' } }
+            maintainAspectRatio: false,
+            plugins: { 
+                legend: { 
+                    position: 'bottom',
+                    labels: { boxWidth: 12, font: { size: 10 } }
+                }
+            }
         }
     });
 }
@@ -476,7 +704,7 @@ async function saveVehicleStatus() {
     
     try {
         if (supabaseClient) {
-            await supabaseClient
+            const { data, error } = await supabaseClient
                 .from('offline_status')
                 .upsert({
                     vehicle_number: vehicleNumber,
@@ -485,11 +713,16 @@ async function saveVehicleStatus() {
                     updated_at: new Date().toISOString(),
                     updated_by: 'Admin'
                 });
+            
+            if (error) {
+                console.error('Supabase error:', error);
+            } else {
+                console.log('Status saved to database');
+            }
         }
         
         updateStatusUI(vehicleNumber, status);
         closeModal();
-        alert('Status updated successfully!');
         
     } catch (error) {
         console.error('Error saving status:', error);
@@ -507,15 +740,15 @@ function updateStatusUI(vehicleNumber, status) {
             'Dashcam Issue': '📷 Dashcam Issue',
             'Technical Problem': '🔧 Technical Problem'
         };
-        statusElement.textContent = statusIcons[status];
+        statusElement.textContent = statusIcons[status] || status;
         
         const statusClasses = {
             'Online': 'status-online',
-            'Parking/Garage': 'status-parking',
+            'Parking/Garage': 'status-parking', 
             'Dashcam Issue': 'status-offline',
             'Technical Problem': 'status-technical'
         };
-        statusElement.className = `status-badge ${statusClasses[status]}`;
+        statusElement.className = `status-badge ${statusClasses[status] || 'status-offline'}`;
     }
 }
 
@@ -563,4 +796,8 @@ function exportData() {
     window.URL.revokeObjectURL(url);
 }
 
-console.log('App.js loaded successfully');
+// Error handling
+window.onerror = function(msg, url, lineNo, columnNo, error) {
+    console.error('Error:', { msg, url, lineNo, columnNo, error });
+    return false;
+};
