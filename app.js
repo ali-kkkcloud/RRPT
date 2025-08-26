@@ -131,8 +131,10 @@ async function loadDateBasedData(selectedDate) {
 async function loadOfflineData() {
     try {
         const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.offline}/export?format=csv&gid=0`;
-        const response = await fetch(csvUrl);
-        const csvText = await response.text();
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(csvUrl)}`;
+        const response = await fetch(proxyUrl);
+        const responseData = await response.json();
+        const csvText = responseData.contents;
         
         const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
         
@@ -163,9 +165,11 @@ async function loadSpeedData(date) {
         
         const gid = gidMap[date] || '293366971';
         const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.speed}/export?format=csv&gid=${gid}`;
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(csvUrl)}`;
         
-        const response = await fetch(csvUrl);
-        const csvText = await response.text();
+        const response = await fetch(proxyUrl);
+        const responseData = await response.json();
+        const csvText = responseData.contents;
         
         const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
         
@@ -200,9 +204,11 @@ async function loadAIAlertsData(date) {
         
         const gid = gidMap[date] || '1378822335';
         const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.alerts}/export?format=csv&gid=${gid}`;
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(csvUrl)}`;
         
-        const response = await fetch(csvUrl);
-        const csvText = await response.text();
+        const response = await fetch(proxyUrl);
+        const responseData = await response.json();
+        const csvText = responseData.contents;
         
         const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
         
