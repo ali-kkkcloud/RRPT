@@ -9,12 +9,13 @@ body {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     min-height: 100vh;
     color: #333;
+    overflow-x: hidden;
 }
 
 .dashboard-container {
     max-width: 1400px;
     margin: 0 auto;
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(255, 255, 255, 0.98);
     min-height: 100vh;
     backdrop-filter: blur(10px);
     box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
@@ -24,15 +25,14 @@ body {
 .dashboard-header {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    padding: 1rem 2rem;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 1rem;
+    box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
 }
 
 .header-content {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    flex-wrap: wrap;
     gap: 1rem;
 }
 
@@ -43,24 +43,27 @@ body {
 }
 
 .logo-icon {
-    font-size: 2.5rem;
+    font-size: 2rem;
     background: rgba(255, 255, 255, 0.2);
     padding: 0.5rem;
     border-radius: 50%;
     backdrop-filter: blur(10px);
+    min-width: 60px;
+    text-align: center;
 }
 
 .logo-text h1 {
-    font-size: 1.8rem;
+    font-size: 1.5rem;
     margin-bottom: 0.2rem;
+    font-weight: 700;
 }
 
 .logo-text p {
     opacity: 0.9;
-    font-size: 0.9rem;
+    font-size: 0.8rem;
 }
 
-.header-right {
+.controls-wrapper {
     display: flex;
     align-items: center;
     gap: 1rem;
@@ -71,17 +74,25 @@ body {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    white-space: nowrap;
+}
+
+.date-selector label {
+    font-size: 0.9rem;
+    font-weight: 500;
 }
 
 .date-selector select {
-    padding: 0.5rem 1rem;
+    padding: 0.4rem 0.8rem;
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
     background: rgba(255, 255, 255, 0.2);
     color: white;
     font-weight: 500;
     cursor: pointer;
     backdrop-filter: blur(10px);
+    font-size: 0.9rem;
+    min-width: 120px;
 }
 
 .date-selector select option {
@@ -89,17 +100,24 @@ body {
     color: white;
 }
 
+.action-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
 /* Button Styles */
 .btn {
-    padding: 0.6rem 1.2rem;
+    padding: 0.5rem 1rem;
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
     cursor: pointer;
     font-weight: 500;
     transition: all 0.3s ease;
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    font-size: 0.9rem;
+    white-space: nowrap;
 }
 
 .btn-primary {
@@ -110,7 +128,7 @@ body {
 
 .btn-primary:hover {
     background: rgba(255, 255, 255, 0.3);
-    transform: translateY(-2px);
+    transform: translateY(-1px);
 }
 
 .btn-secondary {
@@ -127,12 +145,18 @@ body {
 .tab-navigation {
     display: flex;
     background: white;
-    padding: 0 2rem;
     border-bottom: 2px solid #f1f1f1;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.tab-navigation::-webkit-scrollbar {
+    display: none;
 }
 
 .tab-btn {
-    padding: 1rem 2rem;
+    padding: 1rem 1.5rem;
     border: none;
     background: none;
     cursor: pointer;
@@ -143,6 +167,8 @@ body {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    min-width: max-content;
+    flex-shrink: 0;
 }
 
 .tab-btn:hover {
@@ -162,7 +188,7 @@ body {
 
 /* Tab Content */
 .tab-content {
-    padding: 2rem;
+    padding: 1rem;
 }
 
 .tab-pane {
@@ -183,22 +209,26 @@ body {
 .summary-cards {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 2rem;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
 }
 
 .card {
     background: white;
-    padding: 1.5rem;
     border-radius: 12px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     border: 1px solid rgba(102, 126, 234, 0.1);
     transition: all 0.3s ease;
+    overflow: hidden;
 }
 
 .card:hover {
-    transform: translateY(-5px);
+    transform: translateY(-3px);
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+.card-content {
+    padding: 1.5rem;
 }
 
 .card-header {
@@ -213,25 +243,27 @@ body {
     font-size: 0.9rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    font-weight: 600;
 }
 
 .card-icon {
-    font-size: 2rem;
+    font-size: 1.8rem;
     opacity: 0.7;
 }
 
 .card-value {
-    font-size: 2.5rem;
+    font-size: 2.2rem;
     font-weight: bold;
     color: #333;
+    line-height: 1;
 }
 
 /* Charts Grid */
 .charts-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-    gap: 2rem;
-    margin-bottom: 2rem;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
 }
 
 .chart-container {
@@ -246,6 +278,8 @@ body {
     margin-bottom: 1rem;
     color: #333;
     text-align: center;
+    font-size: 1rem;
+    font-weight: 600;
 }
 
 .chart-container canvas {
@@ -259,24 +293,39 @@ body {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     border: 1px solid rgba(102, 126, 234, 0.1);
     overflow: hidden;
+    margin-bottom: 2rem;
 }
 
-.data-table-container h3 {
+.table-header {
     padding: 1.5rem;
     margin: 0;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
 }
 
+.table-header h3 {
+    margin: 0;
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.table-wrapper {
+    overflow-x: auto;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
 table {
     width: 100%;
     border-collapse: collapse;
+    font-size: 0.9rem;
 }
 
 th, td {
-    padding: 1rem;
+    padding: 1rem 0.8rem;
     text-align: left;
     border-bottom: 1px solid #f1f1f1;
+    white-space: nowrap;
 }
 
 th {
@@ -285,6 +334,10 @@ th {
     color: #333;
     position: sticky;
     top: 0;
+    z-index: 1;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 tbody tr:hover {
@@ -300,6 +353,7 @@ tbody tr:hover {
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
+    white-space: nowrap;
 }
 
 .status-online { background: #d4edda; color: #155724; }
@@ -315,6 +369,7 @@ tbody tr:hover {
     cursor: pointer;
     font-size: 0.8rem;
     transition: all 0.2s ease;
+    white-space: nowrap;
 }
 
 .edit-btn {
@@ -324,6 +379,7 @@ tbody tr:hover {
 
 .edit-btn:hover {
     background: #138496;
+    transform: translateY(-1px);
 }
 
 /* Modal Styles */
@@ -341,13 +397,14 @@ tbody tr:hover {
 
 .modal-content {
     background-color: white;
-    margin: 10% auto;
-    padding: 0;
+    margin: 5% auto;
     border-radius: 12px;
     width: 90%;
     max-width: 500px;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
     animation: modalSlideIn 0.3s ease;
+    max-height: 90vh;
+    overflow-y: auto;
 }
 
 @keyframes modalSlideIn {
@@ -367,18 +424,22 @@ tbody tr:hover {
 
 .modal-header h3 {
     margin: 0;
+    font-weight: 600;
 }
 
 .close {
     color: white;
-    font-size: 28px;
+    font-size: 24px;
     font-weight: bold;
     cursor: pointer;
     line-height: 1;
+    padding: 0.2rem;
+    border-radius: 50%;
+    transition: background 0.2s;
 }
 
 .close:hover {
-    opacity: 0.7;
+    background: rgba(255, 255, 255, 0.2);
 }
 
 .modal-body {
@@ -404,6 +465,7 @@ tbody tr:hover {
     border-radius: 8px;
     font-size: 1rem;
     transition: border-color 0.3s ease;
+    font-family: inherit;
 }
 
 .form-group select:focus,
@@ -418,8 +480,8 @@ tbody tr:hover {
     min-height: 80px;
 }
 
-.modal-footer {
-    padding: 1.5rem;
+.modal-actions {
+    padding: 1.5rem 2rem;
     border-top: 1px solid #f1f1f1;
     display: flex;
     justify-content: flex-end;
@@ -435,7 +497,7 @@ tbody tr:hover {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.95);
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -462,51 +524,109 @@ tbody tr:hover {
 .loading p {
     color: #666;
     font-size: 1.1rem;
+    font-weight: 500;
 }
 
 /* Responsive Design */
+@media (max-width: 1200px) {
+    .charts-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .chart-container canvas {
+        max-height: 250px;
+    }
+}
+
 @media (max-width: 768px) {
     .dashboard-container {
         margin: 0;
         border-radius: 0;
     }
     
+    .dashboard-header {
+        padding: 0.8rem;
+    }
+    
     .header-content {
         flex-direction: column;
         text-align: center;
+        gap: 1rem;
     }
     
-    .tab-navigation {
-        padding: 0 1rem;
-        overflow-x: auto;
-        white-space: nowrap;
+    .logo {
+        justify-content: center;
+    }
+    
+    .logo-icon {
+        font-size: 1.8rem;
+        min-width: 50px;
+    }
+    
+    .logo-text h1 {
+        font-size: 1.3rem;
+    }
+    
+    .controls-wrapper {
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    .date-selector {
+        flex-direction: column;
+        gap: 0.3rem;
+    }
+    
+    .date-selector select {
+        min-width: 100px;
+        font-size: 0.85rem;
     }
     
     .tab-btn {
-        padding: 1rem 1.5rem;
-        min-width: max-content;
+        padding: 0.8rem 1rem;
+        font-size: 0.9rem;
+    }
+    
+    .tab-label {
+        display: none;
     }
     
     .tab-content {
-        padding: 1rem;
+        padding: 0.8rem;
     }
     
     .summary-cards {
-        grid-template-columns: 1fr;
-        gap: 1rem;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.8rem;
     }
     
-    .charts-grid {
-        grid-template-columns: 1fr;
-        gap: 1rem;
+    .card-content {
+        padding: 1rem;
+    }
+    
+    .card-value {
+        font-size: 1.8rem;
     }
     
     .chart-container {
         padding: 1rem;
     }
     
+    .chart-container canvas {
+        max-height: 200px;
+    }
+    
+    .table-wrapper {
+        font-size: 0.8rem;
+    }
+    
+    th, td {
+        padding: 0.6rem 0.4rem;
+        font-size: 0.8rem;
+    }
+    
     .modal-content {
-        margin: 5% auto;
+        margin: 2% auto;
         width: 95%;
     }
     
@@ -514,44 +634,98 @@ tbody tr:hover {
         padding: 1.5rem;
     }
     
-    table {
-        font-size: 0.9rem;
-    }
-    
-    th, td {
-        padding: 0.5rem;
+    .modal-actions {
+        padding: 1rem 1.5rem;
+        flex-direction: column;
     }
 }
 
 @media (max-width: 480px) {
     .logo-text h1 {
-        font-size: 1.4rem;
+        font-size: 1.1rem;
+    }
+    
+    .logo-text p {
+        font-size: 0.75rem;
+    }
+    
+    .summary-cards {
+        grid-template-columns: 1fr;
     }
     
     .card-value {
-        font-size: 2rem;
+        font-size: 1.5rem;
     }
     
-    .tab-btn {
-        font-size: 0.9rem;
-        padding: 0.8rem 1rem;
+    .btn {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.8rem;
     }
     
-    table {
+    .date-selector select {
         font-size: 0.8rem;
     }
     
     th, td {
-        padding: 0.4rem;
+        padding: 0.4rem 0.2rem;
+        font-size: 0.75rem;
+    }
+}
+
+/* Tablet Styles */
+@media (min-width: 768px) and (max-width: 1024px) {
+    .header-content {
+        flex-wrap: wrap;
+    }
+    
+    .controls-wrapper {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .summary-cards {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .charts-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Print styles */
+@media print {
+    body {
+        background: white;
+    }
+    
+    .dashboard-container {
+        box-shadow: none;
+        background: white;
+    }
+    
+    .btn, .action-btn {
+        display: none;
+    }
+    
+    .modal {
+        display: none;
+    }
+    
+    .loading {
+        display: none;
+    }
+    
+    .tab-navigation {
+        border-bottom: 2px solid #333;
+    }
+    
+    .chart-container canvas {
+        max-height: 200px;
     }
 }
 
 /* Dark mode support */
 @media (prefers-color-scheme: dark) {
-    body {
-        background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
-    }
-    
     .dashboard-container {
         background: rgba(45, 55, 72, 0.95);
         color: #e2e8f0;
@@ -560,16 +734,19 @@ tbody tr:hover {
     .card {
         background: #2d3748;
         border-color: rgba(102, 126, 234, 0.3);
+        color: #e2e8f0;
     }
     
     .chart-container {
         background: #2d3748;
         border-color: rgba(102, 126, 234, 0.3);
+        color: #e2e8f0;
     }
     
     .data-table-container {
         background: #2d3748;
         border-color: rgba(102, 126, 234, 0.3);
+        color: #e2e8f0;
     }
     
     th {
@@ -579,5 +756,22 @@ tbody tr:hover {
     
     tbody tr:hover {
         background: rgba(102, 126, 234, 0.1);
+    }
+    
+    .modal-content {
+        background: #2d3748;
+        color: #e2e8f0;
+    }
+    
+    .form-group select,
+    .form-group textarea {
+        background: #374151;
+        border-color: #4a5568;
+        color: #e2e8f0;
+    }
+    
+    .modal-actions {
+        background: #374151;
+        border-color: #4a5568;
     }
 }
