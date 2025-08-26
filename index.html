@@ -25,11 +25,37 @@
                 </div>
                 <div class="header-right">
                     <div class="date-selector">
+                        <label for="report-type">📊 Report Type:</label>
+                        <select id="report-type">
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly">Monthly</option>
+                        </select>
+                    </div>
+                    <div class="date-selector" id="daily-selector">
                         <label for="date-select">📅 Select Date:</label>
                         <select id="date-select">
                             <option value="25 August">25 August</option>
                             <option value="24 August">24 August</option>
                             <option value="23 August">23 August</option>
+                            <option value="22 August">22 August</option>
+                            <option value="21 August">21 August</option>
+                        </select>
+                    </div>
+                    <div class="date-selector" id="weekly-selector" style="display:none;">
+                        <label for="week-select">📅 Select Week:</label>
+                        <select id="week-select">
+                            <option value="week-1">Aug 19-25, 2024</option>
+                            <option value="week-2">Aug 12-18, 2024</option>
+                            <option value="week-3">Aug 05-11, 2024</option>
+                        </select>
+                    </div>
+                    <div class="date-selector" id="monthly-selector" style="display:none;">
+                        <label for="month-select">📅 Select Month:</label>
+                        <select id="month-select">
+                            <option value="august-2024">August 2024</option>
+                            <option value="july-2024">July 2024</option>
+                            <option value="june-2024">June 2024</option>
                         </select>
                     </div>
                     <button id="refresh-btn" class="btn btn-primary">🔄 Refresh</button>
@@ -259,12 +285,12 @@
                 </div>
                 <div class="form-group">
                     <label for="reason-input">Reason (Optional):</label>
-                    <textarea id="reason-input" placeholder="Enter reason for status update..."></textarea>
+                    <textarea id="reason-input" placeholder="Enter reason for status update..." rows="3"></textarea>
                 </div>
-            </div>
-            <div class="modal-footer">
-                <button id="save-status" class="btn btn-primary">Save</button>
-                <button id="cancel-status" class="btn btn-secondary">Cancel</button>
+                <div class="modal-footer">
+                    <button id="save-status" class="btn btn-primary">💾 Save</button>
+                    <button id="cancel-status" class="btn btn-secondary">❌ Cancel</button>
+                </div>
             </div>
         </div>
     </div>
