@@ -129,6 +129,7 @@ body {
     background: white;
     padding: 0 2rem;
     border-bottom: 2px solid #f1f1f1;
+    overflow-x: auto;
 }
 
 .tab-btn {
@@ -143,6 +144,7 @@ body {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    white-space: nowrap;
 }
 
 .tab-btn:hover {
@@ -271,6 +273,15 @@ body {
 table {
     width: 100%;
     border-collapse: collapse;
+    overflow-x: auto;
+    display: block;
+    white-space: nowrap;
+}
+
+thead, tbody {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
 }
 
 th, td {
@@ -464,7 +475,7 @@ tbody tr:hover {
     font-size: 1.1rem;
 }
 
-/* Responsive Design */
+/* Mobile Responsive */
 @media (max-width: 768px) {
     .dashboard-container {
         margin: 0;
@@ -478,13 +489,11 @@ tbody tr:hover {
     
     .tab-navigation {
         padding: 0 1rem;
-        overflow-x: auto;
-        white-space: nowrap;
     }
     
     .tab-btn {
         padding: 1rem 1.5rem;
-        min-width: max-content;
+        font-size: 0.9rem;
     }
     
     .tab-content {
@@ -492,7 +501,7 @@ tbody tr:hover {
     }
     
     .summary-cards {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, 1fr);
         gap: 1rem;
     }
     
@@ -515,11 +524,14 @@ tbody tr:hover {
     }
     
     table {
-        font-size: 0.9rem;
+        display: table;
+        overflow-x: scroll;
     }
     
     th, td {
         padding: 0.5rem;
+        font-size: 0.9rem;
+        min-width: 120px;
     }
 }
 
@@ -533,51 +545,17 @@ tbody tr:hover {
     }
     
     .tab-btn {
-        font-size: 0.9rem;
+        font-size: 0.8rem;
         padding: 0.8rem 1rem;
     }
     
-    table {
-        font-size: 0.8rem;
+    .summary-cards {
+        grid-template-columns: 1fr;
     }
     
     th, td {
         padding: 0.4rem;
-    }
-}
-
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-    body {
-        background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
-    }
-    
-    .dashboard-container {
-        background: rgba(45, 55, 72, 0.95);
-        color: #e2e8f0;
-    }
-    
-    .card {
-        background: #2d3748;
-        border-color: rgba(102, 126, 234, 0.3);
-    }
-    
-    .chart-container {
-        background: #2d3748;
-        border-color: rgba(102, 126, 234, 0.3);
-    }
-    
-    .data-table-container {
-        background: #2d3748;
-        border-color: rgba(102, 126, 234, 0.3);
-    }
-    
-    th {
-        background: #374151;
-        color: #e2e8f0;
-    }
-    
-    tbody tr:hover {
-        background: rgba(102, 126, 234, 0.1);
+        font-size: 0.8rem;
+        min-width: 100px;
     }
 }
