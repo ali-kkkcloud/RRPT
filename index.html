@@ -24,46 +24,42 @@
                     </div>
                 </div>
                 <div class="header-right">
-                    <div class="controls-wrapper">
-                        <div class="date-selector">
-                            <label for="report-type">📊 Report:</label>
-                            <select id="report-type">
-                                <option value="daily">Daily</option>
-                                <option value="weekly">Weekly</option>
-                                <option value="monthly">Monthly</option>
-                            </select>
-                        </div>
-                        <div class="date-selector" id="daily-selector">
-                            <label for="date-select">📅 Date:</label>
-                            <select id="date-select">
-                                <option value="25 August">25 August</option>
-                                <option value="24 August">24 August</option>
-                                <option value="23 August">23 August</option>
-                                <option value="22 August">22 August</option>
-                                <option value="21 August">21 August</option>
-                            </select>
-                        </div>
-                        <div class="date-selector" id="weekly-selector" style="display:none;">
-                            <label for="week-select">📅 Week:</label>
-                            <select id="week-select">
-                                <option value="week-1">Aug 19-25</option>
-                                <option value="week-2">Aug 12-18</option>
-                                <option value="week-3">Aug 05-11</option>
-                            </select>
-                        </div>
-                        <div class="date-selector" id="monthly-selector" style="display:none;">
-                            <label for="month-select">📅 Month:</label>
-                            <select id="month-select">
-                                <option value="august-2024">August 2024</option>
-                                <option value="july-2024">July 2024</option>
-                                <option value="june-2024">June 2024</option>
-                            </select>
-                        </div>
-                        <div class="action-buttons">
-                            <button id="refresh-btn" class="btn btn-primary">🔄 Refresh</button>
-                            <button id="export-btn" class="btn btn-secondary">📥 Export</button>
-                        </div>
+                    <div class="date-selector">
+                        <label for="report-type">📊 Report Type:</label>
+                        <select id="report-type">
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly">Monthly</option>
+                        </select>
                     </div>
+                    <div class="date-selector" id="daily-selector">
+                        <label for="date-select">📅 Select Date:</label>
+                        <select id="date-select">
+                            <option value="25 August">25 August</option>
+                            <option value="24 August">24 August</option>
+                            <option value="23 August">23 August</option>
+                            <option value="22 August">22 August</option>
+                            <option value="21 August">21 August</option>
+                        </select>
+                    </div>
+                    <div class="date-selector" id="weekly-selector" style="display:none;">
+                        <label for="week-select">📅 Select Week:</label>
+                        <select id="week-select">
+                            <option value="week-1">Aug 19-25, 2024</option>
+                            <option value="week-2">Aug 12-18, 2024</option>
+                            <option value="week-3">Aug 05-11, 2024</option>
+                        </select>
+                    </div>
+                    <div class="date-selector" id="monthly-selector" style="display:none;">
+                        <label for="month-select">📅 Select Month:</label>
+                        <select id="month-select">
+                            <option value="august-2024">August 2024</option>
+                            <option value="july-2024">July 2024</option>
+                            <option value="june-2024">June 2024</option>
+                        </select>
+                    </div>
+                    <button id="refresh-btn" class="btn btn-primary">🔄 Refresh</button>
+                    <button id="export-btn" class="btn btn-secondary">📥 Export</button>
                 </div>
             </div>
         </header>
@@ -72,15 +68,15 @@
         <nav class="tab-navigation">
             <button class="tab-btn active" data-tab="offline">
                 <span class="tab-icon">🚗</span>
-                <span class="tab-label">Offline Reports</span>
+                Offline Reports
             </button>
             <button class="tab-btn" data-tab="ai-alerts">
                 <span class="tab-icon">🤖</span>
-                <span class="tab-label">AI Alerts</span>
+                AI Alerts
             </button>
             <button class="tab-btn" data-tab="speed">
                 <span class="tab-icon">⚡</span>
-                <span class="tab-label">Speed Alarm</span>
+                Speed Alarm
             </button>
         </nav>
 
@@ -90,40 +86,32 @@
             <div id="offline" class="tab-pane active">
                 <div class="summary-cards">
                     <div class="card">
-                        <div class="card-content">
-                            <div class="card-header">
-                                <h3>Total Offline</h3>
-                                <span class="card-icon">🔴</span>
-                            </div>
-                            <div class="card-value" id="total-offline">0</div>
+                        <div class="card-header">
+                            <h3>Total Offline</h3>
+                            <span class="card-icon">🔴</span>
                         </div>
+                        <div class="card-value" id="total-offline">0</div>
                     </div>
                     <div class="card">
-                        <div class="card-content">
-                            <div class="card-header">
-                                <h3>Parking/Garage</h3>
-                                <span class="card-icon">🅿️</span>
-                            </div>
-                            <div class="card-value" id="parking-count">0</div>
+                        <div class="card-header">
+                            <h3>Parking/Garage</h3>
+                            <span class="card-icon">🅿️</span>
                         </div>
+                        <div class="card-value" id="parking-count">0</div>
                     </div>
                     <div class="card">
-                        <div class="card-content">
-                            <div class="card-header">
-                                <h3>Technical Issues</h3>
-                                <span class="card-icon">🔧</span>
-                            </div>
-                            <div class="card-value" id="technical-count">0</div>
+                        <div class="card-header">
+                            <h3>Technical Issues</h3>
+                            <span class="card-icon">🔧</span>
                         </div>
+                        <div class="card-value" id="technical-count">0</div>
                     </div>
                     <div class="card">
-                        <div class="card-content">
-                            <div class="card-header">
-                                <h3>Avg Offline Hours</h3>
-                                <span class="card-icon">⏰</span>
-                            </div>
-                            <div class="card-value" id="avg-offline">0h</div>
+                        <div class="card-header">
+                            <h3>Avg Offline Hours</h3>
+                            <span class="card-icon">⏰</span>
                         </div>
+                        <div class="card-value" id="avg-offline">0</div>
                     </div>
                 </div>
 
@@ -139,25 +127,21 @@
                 </div>
 
                 <div class="data-table-container">
-                    <div class="table-header">
-                        <h3>Offline Vehicles</h3>
-                    </div>
-                    <div class="table-wrapper">
-                        <table id="offline-table">
-                            <thead>
-                                <tr>
-                                    <th>Vehicle Number</th>
-                                    <th>Last Online</th>
-                                    <th>Offline Hours</th>
-                                    <th>Current Status</th>
-                                    <th>Remarks</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                            </tbody>
-                        </table>
-                    </div>
+                    <h3>Offline Vehicles</h3>
+                    <table id="offline-table">
+                        <thead>
+                            <tr>
+                                <th>Vehicle Number</th>
+                                <th>Last Online</th>
+                                <th>Offline Hours</th>
+                                <th>Current Status</th>
+                                <th>Remarks</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
@@ -165,31 +149,25 @@
             <div id="ai-alerts" class="tab-pane">
                 <div class="summary-cards">
                     <div class="card">
-                        <div class="card-content">
-                            <div class="card-header">
-                                <h3>Total Alerts</h3>
-                                <span class="card-icon">🚨</span>
-                            </div>
-                            <div class="card-value" id="total-alerts">0</div>
+                        <div class="card-header">
+                            <h3>Total Alerts</h3>
+                            <span class="card-icon">🚨</span>
                         </div>
+                        <div class="card-value" id="total-alerts">0</div>
                     </div>
                     <div class="card">
-                        <div class="card-content">
-                            <div class="card-header">
-                                <h3>Unique Vehicles</h3>
-                                <span class="card-icon">🚛</span>
-                            </div>
-                            <div class="card-value" id="unique-vehicles-alerts">0</div>
+                        <div class="card-header">
+                            <h3>Unique Vehicles</h3>
+                            <span class="card-icon">🚛</span>
                         </div>
+                        <div class="card-value" id="unique-vehicles-alerts">0</div>
                     </div>
                     <div class="card">
-                        <div class="card-content">
-                            <div class="card-header">
-                                <h3>Top Violator</h3>
-                                <span class="card-icon">⚠️</span>
-                            </div>
-                            <div class="card-value" id="top-violator">-</div>
+                        <div class="card-header">
+                            <h3>Top Violator</h3>
+                            <span class="card-icon">⚠️</span>
                         </div>
+                        <div class="card-value" id="top-violator">-</div>
                     </div>
                 </div>
 
@@ -205,24 +183,20 @@
                 </div>
 
                 <div class="data-table-container">
-                    <div class="table-header">
-                        <h3>AI Alerts Details</h3>
-                    </div>
-                    <div class="table-wrapper">
-                        <table id="alerts-table">
-                            <thead>
-                                <tr>
-                                    <th>Vehicle</th>
-                                    <th>Company</th>
-                                    <th>Alert Type</th>
-                                    <th>Time</th>
-                                    <th>Evidence</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                            </tbody>
-                        </table>
-                    </div>
+                    <h3>AI Alerts Details</h3>
+                    <table id="alerts-table">
+                        <thead>
+                            <tr>
+                                <th>Vehicle</th>
+                                <th>Company</th>
+                                <th>Alert Type</th>
+                                <th>Time</th>
+                                <th>Evidence</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
@@ -230,40 +204,32 @@
             <div id="speed" class="tab-pane">
                 <div class="summary-cards">
                     <div class="card">
-                        <div class="card-content">
-                            <div class="card-header">
-                                <h3>Total Violations</h3>
-                                <span class="card-icon">🚨</span>
-                            </div>
-                            <div class="card-value" id="total-violations">0</div>
+                        <div class="card-header">
+                            <h3>Total Violations</h3>
+                            <span class="card-icon">🚨</span>
                         </div>
+                        <div class="card-value" id="total-violations">0</div>
                     </div>
                     <div class="card">
-                        <div class="card-content">
-                            <div class="card-header">
-                                <h3>Warnings</h3>
-                                <span class="card-icon">⚠️</span>
-                            </div>
-                            <div class="card-value" id="warning-count">0</div>
+                        <div class="card-header">
+                            <h3>Warnings</h3>
+                            <span class="card-icon">⚠️</span>
                         </div>
+                        <div class="card-value" id="warning-count">0</div>
                     </div>
                     <div class="card">
-                        <div class="card-content">
-                            <div class="card-header">
-                                <h3>Alarms</h3>
-                                <span class="card-icon">🚨</span>
-                            </div>
-                            <div class="card-value" id="alarm-count">0</div>
+                        <div class="card-header">
+                            <h3>Alarms</h3>
+                            <span class="card-icon">🚨</span>
                         </div>
+                        <div class="card-value" id="alarm-count">0</div>
                     </div>
                     <div class="card">
-                        <div class="card-content">
-                            <div class="card-header">
-                                <h3>Max Speed</h3>
-                                <span class="card-icon">📈</span>
-                            </div>
-                            <div class="card-value" id="max-speed">0</div>
+                        <div class="card-header">
+                            <h3>Max Speed</h3>
+                            <span class="card-icon">📈</span>
                         </div>
+                        <div class="card-value" id="max-speed">0</div>
                     </div>
                 </div>
 
@@ -279,25 +245,21 @@
                 </div>
 
                 <div class="data-table-container">
-                    <div class="table-header">
-                        <h3>Speed Violations Details</h3>
-                    </div>
-                    <div class="table-wrapper">
-                        <table id="speed-table">
-                            <thead>
-                                <tr>
-                                    <th>Vehicle</th>
-                                    <th>Company</th>
-                                    <th>Max Speed</th>
-                                    <th>Warnings</th>
-                                    <th>Alarms</th>
-                                    <th>Total Violations</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                            </tbody>
-                        </table>
-                    </div>
+                    <h3>Speed Violations Details</h3>
+                    <table id="speed-table">
+                        <thead>
+                            <tr>
+                                <th>Vehicle</th>
+                                <th>Company</th>
+                                <th>Max Speed</th>
+                                <th>Warnings</th>
+                                <th>Alarms</th>
+                                <th>Total Violations</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </main>
@@ -323,12 +285,12 @@
                 </div>
                 <div class="form-group">
                     <label for="reason-input">Reason (Optional):</label>
-                    <textarea id="reason-input" placeholder="Enter reason for status update..." rows="3"></textarea>
+                    <textarea id="reason-input" placeholder="Enter reason for status update..."></textarea>
                 </div>
-                <div class="modal-actions">
-                    <button id="save-status" class="btn btn-primary">💾 Save</button>
-                    <button id="cancel-status" class="btn btn-secondary">❌ Cancel</button>
-                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="save-status" class="btn btn-primary">Save</button>
+                <button id="cancel-status" class="btn btn-secondary">Cancel</button>
             </div>
         </div>
     </div>
