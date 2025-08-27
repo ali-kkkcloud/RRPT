@@ -400,7 +400,7 @@ function updateRoleUI() {
     console.log(`👤 Role changed to: ${AppState.currentUser.role}`);
 }
 
-// Period management (Daily/Weekly/Monthly)
+// Period management (Daily/Weekly/Monthly) - FIXED
 function changePeriod(period) {
     AppState.currentPeriod = period;
     
@@ -412,10 +412,9 @@ function changePeriod(period) {
     // Update date selector for period
     updateDateSelectorForPeriod(period);
     
-    // Reload data for new period
-    loadDataForPeriod(period);
-    
+    // IMPORTANT: Load data immediately for the new period
     console.log(`📊 Period changed to: ${period}`);
+    loadDataForPeriod(period);
 }
 
 function updateDateSelectorForPeriod(period) {
@@ -501,11 +500,19 @@ async function loadDailyData() {
     ]);
 }
 
-// Auto-detect and load weekly data
+// Auto-detect and load weekly data with enhanced debugging
 async function loadWeeklyData() {
     console.log('📊 Auto-detecting and loading weekly data...');
     
     const availableSheets = await discoverAvailableSheets();
+    console.log('🔍 Discovery results:', availableSheets);
+    
+    if (availableSheets.speed.length === 0 && availableSheets.alerts.length === 0) {
+        console.log('⚠️ No additional sheets found, using current date data only');
+        await loadDailyData();
+        return;
+    }
+    
     console.log(`Found ${availableSheets.speed.length} speed sheets and ${availableSheets.alerts.length} alert sheets`);
     
     let aggregatedSpeed = [];
@@ -543,68 +550,82 @@ async function loadWeeklyData() {
     console.log(`✅ Weekly data loaded: ${aggregatedSpeed.length} speed violations, ${aggregatedAlerts.length} alerts`);
 }
 
-// Automatically discover available sheet tabs
+// Enhanced sheet discovery with more comprehensive GID testing
 async function discoverAvailableSheets() {
     console.log('🔍 Auto-discovering available sheet tabs...');
     
     const speedSheets = [];
     const alertsSheets = [];
     
-    // Try multiple GID ranges to discover sheets
-    // Google Sheets typically use sequential or random GIDs
+    // Expanded GID testing - testing more ranges
     const commonGIDs = [
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // Sequential
-        '293366971', '1378822335', // Known working GIDs
-        // Add more GID patterns based on your actual sheet structure
+        // Sequential numbers
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+        // Known working GIDs from your setup
+        '293366971', '1378822335',
+        // Common Google Sheets GID patterns
+        100, 200, 300, 500, 1000, 2000,
+        // Random-like GIDs that might be generated
+        '123456789', '987654321', '111111111', '222222222', '333333333'
     ];
     
+    console.log(`🔍 Testing ${commonGIDs.length} potential GIDs...`);
+    
     // Test each potential GID for speed sheet
-    for (const gid of commonGIDs) {
+    for (let i = 0; i < commonGIDs.length; i++) {
+        const gid = commonGIDs[i];
+        console.log(`🔍 Testing speed sheet GID ${i + 1}/${commonGIDs.length}: ${gid}`);
+        
         try {
             const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.speed}/export?format=csv&gid=${gid}`;
-            const csvText = await fetchWithTimeout(csvUrl, 3000); // 3 second timeout
+            const csvText = await fetchWithTimeout(csvUrl, 5000); // 5 second timeout
             
-            if (csvText && csvText.length > 100) { // Valid sheet should have substantial content
+            if (csvText && csvText.length > 100) {
                 const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
                 
                 // Check if it looks like speed data
-                if (parsed.data.length > 0 && parsed.data[0]['Speed(Km/h)']) {
+                if (parsed.data.length > 0 && (parsed.data[0]['Speed(Km/h)'] || parsed.data[0]['Speed'] || parsed.data[0]['speed'])) {
                     const sheetName = await getSheetNameFromData(parsed.data, gid);
-                    speedSheets.push({ gid: gid, name: sheetName });
-                    console.log(`✅ Found speed sheet: ${sheetName} (GID: ${gid})`);
+                    speedSheets.push({ gid: gid, name: sheetName, rows: parsed.data.length });
+                    console.log(`✅ Found speed sheet: ${sheetName} (GID: ${gid}) - ${parsed.data.length} rows`);
                 }
             }
         } catch (error) {
-            // Silently continue - expected for non-existent sheets
+            // Expected for non-existent sheets
+            console.log(`❌ Speed GID ${gid} failed: ${error.message}`);
         }
     }
     
     // Test each potential GID for alerts sheet
-    for (const gid of commonGIDs) {
+    for (let i = 0; i < commonGIDs.length; i++) {
+        const gid = commonGIDs[i];
+        console.log(`🔍 Testing alerts sheet GID ${i + 1}/${commonGIDs.length}: ${gid}`);
+        
         try {
             const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.alerts}/export?format=csv&gid=${gid}`;
-            const csvText = await fetchWithTimeout(csvUrl, 3000);
+            const csvText = await fetchWithTimeout(csvUrl, 5000);
             
             if (csvText && csvText.length > 100) {
                 const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
                 
                 // Check if it looks like alerts data
-                if (parsed.data.length > 0 && parsed.data[0]['Alarm Type']) {
+                if (parsed.data.length > 0 && (parsed.data[0]['Alarm Type'] || parsed.data[0]['Alert Type'] || parsed.data[0]['alarm'])) {
                     const sheetName = await getSheetNameFromData(parsed.data, gid);
-                    alertsSheets.push({ gid: gid, name: sheetName });
-                    console.log(`✅ Found alerts sheet: ${sheetName} (GID: ${gid})`);
+                    alertsSheets.push({ gid: gid, name: sheetName, rows: parsed.data.length });
+                    console.log(`✅ Found alerts sheet: ${sheetName} (GID: ${gid}) - ${parsed.data.length} rows`);
                 }
             }
         } catch (error) {
-            // Silently continue
+            console.log(`❌ Alerts GID ${gid} failed: ${error.message}`);
         }
     }
     
-    // Cache discovered sheets to avoid repeated discovery
+    // Cache discovered sheets
     const discoveredSheets = { speed: speedSheets, alerts: alertsSheets };
     localStorage.setItem('discovered-sheets', JSON.stringify(discoveredSheets));
     localStorage.setItem('sheets-discovery-time', Date.now().toString());
     
+    console.log('🎯 Final discovery results:', discoveredSheets);
     return discoveredSheets;
 }
 
