@@ -1,0 +1,160 @@
+{
+  "name": "G4S Fleet Management Dashboard",
+  "short_name": "G4S Fleet",
+  "description": "Advanced fleet monitoring dashboard with AI insights, real-time alerts, and comprehensive reporting for G4S fleet management.",
+  "version": "2.0.0",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#667eea",
+  "background_color": "#ffffff",
+  "scope": "/",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["business", "productivity", "utilities"],
+  "screenshots": [
+    {
+      "src": "images/screenshot-wide.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Dashboard Overview"
+    },
+    {
+      "src": "images/screenshot-narrow.png", 
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Mobile Dashboard"
+    }
+  ],
+  "icons": [
+    {
+      "src": "images/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "images/icon-96x96.png",
+      "sizes": "96x96", 
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "images/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "images/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "images/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "images/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "images/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "images/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Offline Reports",
+      "short_name": "Offline",
+      "description": "View vehicles currently offline",
+      "url": "/?tab=offline",
+      "icons": [
+        {
+          "src": "images/offline-icon.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "AI Alerts", 
+      "short_name": "Alerts",
+      "description": "View AI-generated safety alerts",
+      "url": "/?tab=ai-alerts",
+      "icons": [
+        {
+          "src": "images/alerts-icon.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Speed Violations",
+      "short_name": "Speed",
+      "description": "Monitor speed violations",
+      "url": "/?tab=speed",
+      "icons": [
+        {
+          "src": "images/speed-icon.png", 
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "AI Insights",
+      "short_name": "Insights",
+      "description": "View AI-powered fleet insights",
+      "url": "/?tab=insights",
+      "icons": [
+        {
+          "src": "images/insights-icon.png",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "file",
+          "accept": ["text/csv", ".csv"]
+        }
+      ]
+    }
+  },
+  "protocol_handlers": [
+    {
+      "protocol": "web+g4sfleet",
+      "url": "/?vehicle=%s"
+    }
+  ],
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  "handle_links": "preferred",
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  }
+}
