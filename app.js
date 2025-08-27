@@ -550,83 +550,233 @@ async function loadWeeklyData() {
     console.log(`✅ Weekly data loaded: ${aggregatedSpeed.length} speed violations, ${aggregatedAlerts.length} alerts`);
 }
 
-// Enhanced sheet discovery with more comprehensive GID testing
+// Smart date-based sheet discovery using systematic GID testing
 async function discoverAvailableSheets() {
-    console.log('🔍 Auto-discovering available sheet tabs...');
+    console.log('🔍 Smart discovery: Finding sheets by date patterns...');
     
     const speedSheets = [];
     const alertsSheets = [];
     
-    // Expanded GID testing - testing more ranges
-    const commonGIDs = [
-        // Sequential numbers
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-        // Known working GIDs from your setup
-        '293366971', '1378822335',
-        // Common Google Sheets GID patterns
-        100, 200, 300, 500, 1000, 2000,
-        // Random-like GIDs that might be generated
-        '123456789', '987654321', '111111111', '222222222', '333333333'
-    ];
+    // Generate expected date patterns for the last 60 days
+    const datePatterns = generateDatePatterns();
+    console.log(`📅 Generated ${datePatterns.length} date patterns to test`);
     
-    console.log(`🔍 Testing ${commonGIDs.length} potential GIDs...`);
+    // Test systematic GID ranges with better coverage
+    const gidRanges = [
+        // Known working GIDs first
+        ['293366971', '1378822335'],
+        // Sequential from 0-100 
+        Array.from({length: 100}, (_, i) => i.toString()),
+        // Higher ranges that Google often uses
+        Array.from({length: 50}, (_, i) => (1000000000 + i * 1000000).toString()),
+        Array.from({length: 50}, (_, i) => (2000000000 + i * 1000000).toString()),
+        // Random-like patterns
+        ['123456789', '987654321', '111111111', '222222222', '333333333', '444444444', '555555555']
+    ].flat();
     
-    // Test each potential GID for speed sheet
-    for (let i = 0; i < commonGIDs.length; i++) {
-        const gid = commonGIDs[i];
-        console.log(`🔍 Testing speed sheet GID ${i + 1}/${commonGIDs.length}: ${gid}`);
+    console.log(`🔍 Testing ${gidRanges.length} GID patterns systematically...`);
+    
+    // Test speed sheets with better error handling
+    let speedFound = 0;
+    for (let i = 0; i < gidRanges.length && speedFound < 30; i++) {
+        const gid = gidRanges[i];
         
         try {
             const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.speed}/export?format=csv&gid=${gid}`;
-            const csvText = await fetchWithTimeout(csvUrl, 5000); // 5 second timeout
+            const csvText = await fetchWithTimeout(csvUrl, 3000);
             
-            if (csvText && csvText.length > 100) {
+            if (csvText && csvText.length > 200) {
                 const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
                 
-                // Check if it looks like speed data
-                if (parsed.data.length > 0 && (parsed.data[0]['Speed(Km/h)'] || parsed.data[0]['Speed'] || parsed.data[0]['speed'])) {
-                    const sheetName = await getSheetNameFromData(parsed.data, gid);
-                    speedSheets.push({ gid: gid, name: sheetName, rows: parsed.data.length });
-                    console.log(`✅ Found speed sheet: ${sheetName} (GID: ${gid}) - ${parsed.data.length} rows`);
+                // Check if it's speed data with more flexible column detection
+                if (parsed.data.length > 5 && hasSpeedColumns(parsed.data[0])) {
+                    const sheetName = extractDateFromData(parsed.data, gid);
+                    
+                    // Only include if we can identify a valid date
+                    if (sheetName && isValidDateTab(sheetName)) {
+                        speedSheets.push({ 
+                            gid: gid, 
+                            name: sheetName, 
+                            rows: parsed.data.length,
+                            date: parseDateFromName(sheetName)
+                        });
+                        speedFound++;
+                        console.log(`✅ Speed sheet: ${sheetName} (GID: ${gid}) - ${parsed.data.length} rows`);
+                    }
                 }
             }
         } catch (error) {
-            // Expected for non-existent sheets
-            console.log(`❌ Speed GID ${gid} failed: ${error.message}`);
+            // Continue silently for non-existent sheets
+            if (i % 20 === 0) console.log(`⏳ Tested ${i}/${gidRanges.length} GIDs for speed...`);
         }
     }
     
-    // Test each potential GID for alerts sheet
-    for (let i = 0; i < commonGIDs.length; i++) {
-        const gid = commonGIDs[i];
-        console.log(`🔍 Testing alerts sheet GID ${i + 1}/${commonGIDs.length}: ${gid}`);
+    // Test alerts sheets
+    let alertsFound = 0;
+    for (let i = 0; i < gidRanges.length && alertsFound < 30; i++) {
+        const gid = gidRanges[i];
         
         try {
             const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.alerts}/export?format=csv&gid=${gid}`;
-            const csvText = await fetchWithTimeout(csvUrl, 5000);
+            const csvText = await fetchWithTimeout(csvUrl, 3000);
             
-            if (csvText && csvText.length > 100) {
+            if (csvText && csvText.length > 200) {
                 const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
                 
-                // Check if it looks like alerts data
-                if (parsed.data.length > 0 && (parsed.data[0]['Alarm Type'] || parsed.data[0]['Alert Type'] || parsed.data[0]['alarm'])) {
-                    const sheetName = await getSheetNameFromData(parsed.data, gid);
-                    alertsSheets.push({ gid: gid, name: sheetName, rows: parsed.data.length });
-                    console.log(`✅ Found alerts sheet: ${sheetName} (GID: ${gid}) - ${parsed.data.length} rows`);
+                // Check if it's alerts data
+                if (parsed.data.length > 5 && hasAlertColumns(parsed.data[0])) {
+                    const sheetName = extractDateFromData(parsed.data, gid);
+                    
+                    if (sheetName && isValidDateTab(sheetName)) {
+                        alertsSheets.push({ 
+                            gid: gid, 
+                            name: sheetName, 
+                            rows: parsed.data.length,
+                            date: parseDateFromName(sheetName)
+                        });
+                        alertsFound++;
+                        console.log(`✅ Alerts sheet: ${sheetName} (GID: ${gid}) - ${parsed.data.length} rows`);
+                    }
                 }
             }
         } catch (error) {
-            console.log(`❌ Alerts GID ${gid} failed: ${error.message}`);
+            if (i % 20 === 0) console.log(`⏳ Tested ${i}/${gidRanges.length} GIDs for alerts...`);
         }
     }
     
-    // Cache discovered sheets
+    // Sort by date (newest first)
+    speedSheets.sort((a, b) => b.date - a.date);
+    alertsSheets.sort((a, b) => b.date - a.date);
+    
     const discoveredSheets = { speed: speedSheets, alerts: alertsSheets };
+    
+    // Cache results
     localStorage.setItem('discovered-sheets', JSON.stringify(discoveredSheets));
     localStorage.setItem('sheets-discovery-time', Date.now().toString());
     
-    console.log('🎯 Final discovery results:', discoveredSheets);
+    console.log(`🎯 Discovery complete: ${speedSheets.length} speed sheets, ${alertsSheets.length} alert sheets`);
     return discoveredSheets;
+}
+
+// Check if data has speed columns
+function hasSpeedColumns(firstRow) {
+    const speedColumns = ['Speed(Km/h)', 'Speed', 'speed', 'Speed (Km/h)', 'Speed(km/h)'];
+    return speedColumns.some(col => firstRow.hasOwnProperty(col));
+}
+
+// Check if data has alert columns  
+function hasAlertColumns(firstRow) {
+    const alertColumns = ['Alarm Type', 'Alert Type', 'alarm', 'alert', 'Alarm', 'Alert'];
+    return alertColumns.some(col => firstRow.hasOwnProperty(col));
+}
+
+// Extract date from sheet data
+function extractDateFromData(data, gid) {
+    // Try to find date in first few rows
+    for (let i = 0; i < Math.min(5, data.length); i++) {
+        const row = data[i];
+        
+        // Check common date fields
+        const dateFields = ['Date', 'Starting time', 'Timestamp', 'Time', 'date', 'time'];
+        
+        for (const field of dateFields) {
+            if (row[field]) {
+                const dateStr = row[field].toString();
+                
+                // Try to extract date patterns like "25 August" or "29-07-25"
+                const pattern1 = dateStr.match(/(\d{1,2})\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i);
+                if (pattern1) {
+                    return `${pattern1[1]} ${pattern1[2]}`;
+                }
+                
+                const pattern2 = dateStr.match(/(\d{1,2})-(\d{1,2})-(\d{2})/);
+                if (pattern2) {
+                    return `${pattern2[1]}-${pattern2[2]}-${pattern2[3]}`;
+                }
+                
+                const pattern3 = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+                if (pattern3) {
+                    return `${pattern3[1]}-${pattern3[2]}-${pattern3[3].slice(-2)}`;
+                }
+            }
+        }
+    }
+    
+    // Fallback: use known GID mappings
+    const knownGIDs = {
+        '0': '24 August',
+        '1': '23 August',
+        '293366971': '25 August',
+        '1378822335': '25 August'
+    };
+    
+    return knownGIDs[gid] || null;
+}
+
+// Check if sheet name represents a valid date tab
+function isValidDateTab(name) {
+    if (!name) return false;
+    
+    // Pattern 1: "DD Month" like "25 August"
+    if (/^\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i.test(name)) {
+        return true;
+    }
+    
+    // Pattern 2: "DD-MM-YY" like "29-07-25"  
+    if (/^\d{1,2}-\d{1,2}-\d{2}$/.test(name)) {
+        return true;
+    }
+    
+    return false;
+}
+
+// Parse date from sheet name for sorting
+function parseDateFromName(name) {
+    try {
+        // Handle "DD Month" format
+        const pattern1 = name.match(/^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i);
+        if (pattern1) {
+            const currentYear = new Date().getFullYear();
+            return new Date(`${pattern1[1]} ${pattern1[2]} ${currentYear}`);
+        }
+        
+        // Handle "DD-MM-YY" format
+        const pattern2 = name.match(/^(\d{1,2})-(\d{1,2})-(\d{2})$/);
+        if (pattern2) {
+            const year = 2000 + parseInt(pattern2[3]);
+            const month = parseInt(pattern2[2]) - 1; // JS months are 0-based
+            const day = parseInt(pattern2[1]);
+            return new Date(year, month, day);
+        }
+        
+        return new Date(); // Default to current date for sorting
+    } catch (error) {
+        return new Date();
+    }
+}
+
+// Generate expected date patterns for recent dates
+function generateDatePatterns() {
+    const patterns = [];
+    const currentDate = new Date();
+    
+    // Generate last 60 days in both formats
+    for (let i = 0; i < 60; i++) {
+        const date = new Date(currentDate);
+        date.setDate(date.getDate() - i);
+        
+        // Format 1: "25 August"
+        const monthName = date.toLocaleDateString('en-GB', { month: 'long' });
+        patterns.push(`${date.getDate()} ${monthName}`);
+        
+        // Format 2: "29-07-25"
+        const day = date.getDate().toString().padStart(2, '0');
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const year = date.getFullYear().toString().slice(-2);
+        patterns.push(`${day}-${month}-${year}`);
+    }
+    
+    return patterns;
 }
 
 // Get cached sheet discovery or rediscover if stale
