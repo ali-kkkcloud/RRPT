@@ -458,10 +458,514 @@ function updateDateSelectorForPeriod(period) {
     }
 }
 
-function loadDataForPeriod(period) {
-    // This would aggregate data based on the selected period
-    // For now, we'll use the existing data loading logic
-    loadAllData();
+async function loadDataForPeriod(period) {
+    console.log(`Loading data for period: ${period}`);
+    showLoading(true);
+    AppState.isLoading = true;
+    
+    try {
+        switch (period) {
+            case 'daily':
+                // Load single day data
+                await loadDailyData();
+                break;
+            case 'weekly':
+                // Load and aggregate 7 days of data
+                await loadWeeklyData();
+                break;
+            case 'monthly':
+                // Load and aggregate 30 days of data  
+                await loadMonthlyData();
+                break;
+        }
+        
+        applyFilters();
+        console.log(`✅ ${period} data loaded successfully`);
+        
+    } catch (error) {
+        console.error(`❌ Error loading ${period} data:`, error);
+        showNotification(`Error loading ${period} data`, 'error');
+    } finally {
+        AppState.isLoading = false;
+        showLoading(false);
+    }
+}
+
+// Load single day data (current functionality)
+async function loadDailyData() {
+    const selectedDate = document.getElementById('date-select').value;
+    await Promise.all([
+        loadOfflineData(),
+        loadSpeedData(selectedDate),
+        loadAIAlertsData(selectedDate)
+    ]);
+}
+
+// Auto-detect and load weekly data
+async function loadWeeklyData() {
+    console.log('📊 Auto-detecting and loading weekly data...');
+    
+    const availableSheets = await discoverAvailableSheets();
+    console.log(`Found ${availableSheets.speed.length} speed sheets and ${availableSheets.alerts.length} alert sheets`);
+    
+    let aggregatedSpeed = [];
+    let aggregatedAlerts = [];
+    
+    // Load speed data from all available sheets
+    for (const sheetInfo of availableSheets.speed) {
+        try {
+            const speedData = await loadSpeedDataByGID(sheetInfo.gid, sheetInfo.name);
+            aggregatedSpeed = [...aggregatedSpeed, ...speedData];
+            console.log(`✅ Loaded ${speedData.length} speed records from ${sheetInfo.name}`);
+        } catch (error) {
+            console.log(`⚠️ Failed to load speed data from ${sheetInfo.name}:`, error.message);
+        }
+    }
+    
+    // Load alerts data from all available sheets
+    for (const sheetInfo of availableSheets.alerts) {
+        try {
+            const alertsData = await loadAlertsDataByGID(sheetInfo.gid, sheetInfo.name);
+            aggregatedAlerts = [...aggregatedAlerts, ...alertsData];
+            console.log(`✅ Loaded ${alertsData.length} alert records from ${sheetInfo.name}`);
+        } catch (error) {
+            console.log(`⚠️ Failed to load alerts data from ${sheetInfo.name}:`, error.message);
+        }
+    }
+    
+    // Load offline data (same for all periods)
+    await loadOfflineData();
+    
+    // Store aggregated data
+    AppState.data.speed = aggregatedSpeed;
+    AppState.data.alerts = aggregatedAlerts;
+    
+    console.log(`✅ Weekly data loaded: ${aggregatedSpeed.length} speed violations, ${aggregatedAlerts.length} alerts`);
+}
+
+// Automatically discover available sheet tabs
+async function discoverAvailableSheets() {
+    console.log('🔍 Auto-discovering available sheet tabs...');
+    
+    const speedSheets = [];
+    const alertsSheets = [];
+    
+    // Try multiple GID ranges to discover sheets
+    // Google Sheets typically use sequential or random GIDs
+    const commonGIDs = [
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, // Sequential
+        '293366971', '1378822335', // Known working GIDs
+        // Add more GID patterns based on your actual sheet structure
+    ];
+    
+    // Test each potential GID for speed sheet
+    for (const gid of commonGIDs) {
+        try {
+            const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.speed}/export?format=csv&gid=${gid}`;
+            const csvText = await fetchWithTimeout(csvUrl, 3000); // 3 second timeout
+            
+            if (csvText && csvText.length > 100) { // Valid sheet should have substantial content
+                const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+                
+                // Check if it looks like speed data
+                if (parsed.data.length > 0 && parsed.data[0]['Speed(Km/h)']) {
+                    const sheetName = await getSheetNameFromData(parsed.data, gid);
+                    speedSheets.push({ gid: gid, name: sheetName });
+                    console.log(`✅ Found speed sheet: ${sheetName} (GID: ${gid})`);
+                }
+            }
+        } catch (error) {
+            // Silently continue - expected for non-existent sheets
+        }
+    }
+    
+    // Test each potential GID for alerts sheet
+    for (const gid of commonGIDs) {
+        try {
+            const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.alerts}/export?format=csv&gid=${gid}`;
+            const csvText = await fetchWithTimeout(csvUrl, 3000);
+            
+            if (csvText && csvText.length > 100) {
+                const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+                
+                // Check if it looks like alerts data
+                if (parsed.data.length > 0 && parsed.data[0]['Alarm Type']) {
+                    const sheetName = await getSheetNameFromData(parsed.data, gid);
+                    alertsSheets.push({ gid: gid, name: sheetName });
+                    console.log(`✅ Found alerts sheet: ${sheetName} (GID: ${gid})`);
+                }
+            }
+        } catch (error) {
+            // Silently continue
+        }
+    }
+    
+    // Cache discovered sheets to avoid repeated discovery
+    const discoveredSheets = { speed: speedSheets, alerts: alertsSheets };
+    localStorage.setItem('discovered-sheets', JSON.stringify(discoveredSheets));
+    localStorage.setItem('sheets-discovery-time', Date.now().toString());
+    
+    return discoveredSheets;
+}
+
+// Get cached sheet discovery or rediscover if stale
+async function getCachedOrDiscoverSheets() {
+    const cached = localStorage.getItem('discovered-sheets');
+    const discoveryTime = localStorage.getItem('sheets-discovery-time');
+    
+    // Use cache if less than 1 hour old
+    if (cached && discoveryTime && (Date.now() - parseInt(discoveryTime)) < 3600000) {
+        console.log('📋 Using cached sheet discovery');
+        return JSON.parse(cached);
+    }
+    
+    console.log('🔄 Cache expired, rediscovering sheets...');
+    return await discoverAvailableSheets();
+}
+
+// Fetch with timeout to avoid hanging on non-existent sheets
+async function fetchWithTimeout(url, timeout = 5000) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    try {
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        
+        if (response.ok) {
+            return await response.text();
+        }
+        throw new Error('Response not ok');
+    } catch (error) {
+        clearTimeout(timeoutId);
+        throw error;
+    }
+}
+
+// Determine sheet name from data content or GID
+async function getSheetNameFromData(data, gid) {
+    // Try to extract date from data if available
+    if (data.length > 0) {
+        const firstRow = data[0];
+        
+        // Look for date patterns in the data
+        const dateFields = ['Date', 'Starting time', 'Timestamp', 'Time'];
+        for (const field of dateFields) {
+            if (firstRow[field]) {
+                const dateMatch = firstRow[field].match(/(\d{1,2})\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i);
+                if (dateMatch) {
+                    return `${dateMatch[1]} ${dateMatch[2]}`;
+                }
+            }
+        }
+    }
+    
+    // Fallback to GID-based naming
+    const knownGIDs = {
+        '0': '24 August',
+        '1': '23 August', 
+        '293366971': '25 August',
+        '1378822335': '25 August'
+    };
+    
+    return knownGIDs[gid] || `Sheet ${gid}`;
+}
+
+// Load speed data by GID
+async function loadSpeedDataByGID(gid, sheetName) {
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.speed}/export?format=csv&gid=${gid}`;
+    const csvText = await fetchWithFallback(csvUrl);
+    
+    if (csvText) {
+        const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+        
+        return parsed.data.filter(row => {
+            const speed = parseFloat(row['Speed(Km/h)']) || 0;
+            return speed >= 75 && row['Plate NO.'];
+        }).map(row => ({
+            plateNo: row['Plate NO.'] || '',
+            company: row['Company'] || '',
+            startingTime: row['Starting time'] || '',
+            speed: parseFloat(row['Speed(Km/h)']) || 0,
+            location: row['Location'] || 'Unknown',
+            date: sheetName,
+            gid: gid,
+            riskLevel: parseFloat(row['Speed(Km/h)']) >= 90 ? 'High' : 'Medium',
+            violationType: parseFloat(row['Speed(Km/h)']) >= 90 ? 'Alarm' : 'Warning'
+        }));
+    }
+    return [];
+}
+
+// Load alerts data by GID  
+async function loadAlertsDataByGID(gid, sheetName) {
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.alerts}/export?format=csv&gid=${gid}`;
+    const csvText = await fetchWithFallback(csvUrl);
+    
+    if (csvText) {
+        const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+        
+        return parsed.data.filter(row => {
+            return row['Plate NO.'] && row['Alarm Type'];
+        }).map(row => ({
+            plateNo: row['Plate NO.'] || '',
+            company: row['Company'] || '',
+            alarmType: row['Alarm Type'] || '',
+            startingTime: row['Starting time'] || '',
+            imageLink: row['Image Link'] || '',
+            location: row['Location'] || 'Unknown',
+            date: sheetName,
+            gid: gid,
+            priority: calculateAlertPriority(row['Alarm Type'] || ''),
+            riskScore: calculateRiskScore(row['Alarm Type'] || '')
+        }));
+    }
+    return [];
+}
+
+// Load and aggregate monthly data using auto-discovery
+async function loadMonthlyData() {
+    console.log('📊 Auto-detecting and loading monthly data...');
+    
+    const availableSheets = await getCachedOrDiscoverSheets();
+    console.log(`Found ${availableSheets.speed.length} speed sheets and ${availableSheets.alerts.length} alert sheets for monthly view`);
+    
+    let aggregatedSpeed = [];
+    let aggregatedAlerts = [];
+    
+    // Load all available data for monthly view
+    for (const sheetInfo of availableSheets.speed) {
+        try {
+            const speedData = await loadSpeedDataByGID(sheetInfo.gid, sheetInfo.name);
+            aggregatedSpeed = [...aggregatedSpeed, ...speedData];
+            console.log(`✅ Monthly: Loaded ${speedData.length} speed records from ${sheetInfo.name}`);
+        } catch (error) {
+            console.log(`⚠️ Failed to load monthly speed data from ${sheetInfo.name}:`, error.message);
+        }
+    }
+    
+    for (const sheetInfo of availableSheets.alerts) {
+        try {
+            const alertsData = await loadAlertsDataByGID(sheetInfo.gid, sheetInfo.name);
+            aggregatedAlerts = [...aggregatedAlerts, ...alertsData];
+            console.log(`✅ Monthly: Loaded ${alertsData.length} alert records from ${sheetInfo.name}`);
+        } catch (error) {
+            console.log(`⚠️ Failed to load monthly alerts data from ${sheetInfo.name}:`, error.message);
+        }
+    }
+    
+    // Load offline data
+    await loadOfflineData();
+    
+    // Add monthly period marker
+    AppState.data.speed = aggregatedSpeed.map(item => ({ ...item, period: 'monthly' }));
+    AppState.data.alerts = aggregatedAlerts.map(item => ({ ...item, period: 'monthly' }));
+    
+    console.log(`✅ Monthly data loaded: ${aggregatedSpeed.length} speed violations, ${aggregatedAlerts.length} alerts`);
+}
+
+// Update date selector based on discovered sheets
+async function updateDateSelectorForPeriod(period) {
+    const dateSelect = document.getElementById('date-select');
+    dateSelect.innerHTML = '';
+    
+    if (period === 'daily') {
+        // For daily, show individual discovered sheets
+        const availableSheets = await getCachedOrDiscoverSheets();
+        const uniqueDates = new Set();
+        
+        // Collect unique dates from both speed and alerts sheets
+        [...availableSheets.speed, ...availableSheets.alerts].forEach(sheet => {
+            uniqueDates.add(sheet.name);
+        });
+        
+        const sortedDates = Array.from(uniqueDates).sort((a, b) => {
+            // Try to sort by date if possible, otherwise alphabetically
+            const dateA = parseDate(a);
+            const dateB = parseDate(b);
+            if (dateA && dateB) {
+                return dateB - dateA; // Most recent first
+            }
+            return a.localeCompare(b);
+        });
+        
+        sortedDates.forEach(date => {
+            const option = new Option(date, date);
+            dateSelect.appendChild(option);
+        });
+        
+        console.log(`📅 Daily date selector updated with ${sortedDates.length} discovered dates`);
+        
+    } else if (period === 'weekly') {
+        // For weekly, show week ranges
+        const currentDate = new Date();
+        for (let i = 0; i < 4; i++) {
+            const startDate = new Date(currentDate);
+            startDate.setDate(startDate.getDate() - (i * 7));
+            const endDate = new Date(startDate);
+            endDate.setDate(endDate.getDate() - 6);
+            
+            const weekStr = `Week ${endDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} - ${startDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
+            const option = new Option(weekStr, weekStr);
+            dateSelect.appendChild(option);
+        }
+        
+    } else if (period === 'monthly') {
+        // For monthly, show month ranges
+        const currentDate = new Date();
+        for (let i = 0; i < 6; i++) {
+            const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+            const monthStr = date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+            const option = new Option(monthStr, monthStr);
+            dateSelect.appendChild(option);
+        }
+    }
+}
+
+// Helper function to parse date from sheet name
+function parseDate(dateString) {
+    try {
+        // Try to parse dates like "25 August", "1 September", etc.
+        const currentYear = new Date().getFullYear();
+        const parsed = new Date(`${dateString} ${currentYear}`);
+        return isNaN(parsed.getTime()) ? null : parsed;
+    } catch {
+        return null;
+    }
+}
+
+// Enhanced daily data loading using auto-discovery
+async function loadDailyData() {
+    const selectedDate = document.getElementById('date-select').value;
+    console.log(`📅 Loading daily data for: ${selectedDate}`);
+    
+    const availableSheets = await getCachedOrDiscoverSheets();
+    
+    // Find matching sheets for the selected date
+    const matchingSpeedSheets = availableSheets.speed.filter(sheet => sheet.name === selectedDate);
+    const matchingAlertSheets = availableSheets.alerts.filter(sheet => sheet.name === selectedDate);
+    
+    let speedData = [];
+    let alertsData = [];
+    
+    // Load speed data from matching sheets
+    for (const sheet of matchingSpeedSheets) {
+        const data = await loadSpeedDataByGID(sheet.gid, sheet.name);
+        speedData = [...speedData, ...data];
+    }
+    
+    // Load alerts data from matching sheets
+    for (const sheet of matchingAlertSheets) {
+        const data = await loadAlertsDataByGID(sheet.gid, sheet.name);
+        alertsData = [...alertsData, ...data];
+    }
+    
+    // If no matching sheets found, fall back to old method
+    if (speedData.length === 0 && alertsData.length === 0) {
+        console.log(`⚠️ No matching sheets found for ${selectedDate}, using fallback method`);
+        await Promise.all([
+            loadSpeedData(selectedDate),
+            loadAIAlertsData(selectedDate)
+        ]);
+    } else {
+        AppState.data.speed = speedData;
+        AppState.data.alerts = alertsData;
+        console.log(`✅ Daily data loaded: ${speedData.length} speed violations, ${alertsData.length} alerts`);
+    }
+    
+    // Always load offline data
+    await loadOfflineData();
+}
+
+// Add a refresh sheets discovery function
+async function refreshSheetsDiscovery() {
+    console.log('🔄 Forcing sheets rediscovery...');
+    localStorage.removeItem('discovered-sheets');
+    localStorage.removeItem('sheets-discovery-time');
+    
+    showNotification('Refreshing available sheets...', 'info');
+    const sheets = await discoverAvailableSheets();
+    
+    showNotification(`Found ${sheets.speed.length + sheets.alerts.length} sheet tabs`, 'success');
+    
+    // Update the current period's date selector
+    await updateDateSelectorForPeriod(AppState.currentPeriod);
+    
+    return sheets;
+}
+
+// Helper function to load speed data for a specific date
+async function loadSpeedDataForDate(date) {
+    const gidMap = {
+        '25 August': '293366971',
+        '24 August': '0',
+        '23 August': '1'
+    };
+    
+    const gid = gidMap[date] || '293366971';
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.speed}/export?format=csv&gid=${gid}`;
+    
+    try {
+        const csvText = await fetchWithFallback(csvUrl);
+        if (csvText) {
+            const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+            
+            return parsed.data.filter(row => {
+                const speed = parseFloat(row['Speed(Km/h)']) || 0;
+                return speed >= 75 && row['Plate NO.'];
+            }).map(row => ({
+                plateNo: row['Plate NO.'] || '',
+                company: row['Company'] || '',
+                startingTime: row['Starting time'] || '',
+                speed: parseFloat(row['Speed(Km/h)']) || 0,
+                location: row['Location'] || 'Unknown',
+                date: date,
+                riskLevel: parseFloat(row['Speed(Km/h)']) >= 90 ? 'High' : 'Medium',
+                violationType: parseFloat(row['Speed(Km/h)']) >= 90 ? 'Alarm' : 'Warning'
+            }));
+        }
+    } catch (error) {
+        console.log(`Failed to load speed data for ${date}:`, error.message);
+    }
+    
+    return [];
+}
+
+// Helper function to load alerts data for a specific date  
+async function loadAIAlertsDataForDate(date) {
+    const gidMap = {
+        '25 August': '1378822335',
+        '24 August': '0',
+        '23 August': '1'
+    };
+    
+    const gid = gidMap[date] || '1378822335';
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.alerts}/export?format=csv&gid=${gid}`;
+    
+    try {
+        const csvText = await fetchWithFallback(csvUrl);
+        if (csvText) {
+            const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+            
+            return parsed.data.filter(row => {
+                return row['Plate NO.'] && row['Alarm Type'];
+            }).map(row => ({
+                plateNo: row['Plate NO.'] || '',
+                company: row['Company'] || '',
+                alarmType: row['Alarm Type'] || '',
+                startingTime: row['Starting time'] || '',
+                imageLink: row['Image Link'] || '',
+                location: row['Location'] || 'Unknown',
+                date: date,
+                priority: calculateAlertPriority(row['Alarm Type'] || ''),
+                riskScore: calculateRiskScore(row['Alarm Type'] || '')
+            }));
+        }
+    } catch (error) {
+        console.log(`Failed to load alerts data for ${date}:`, error.message);
+    }
+    
+    return [];
 }
 
 // Tab management
