@@ -1,4 +1,3 @@
-// Enhanced G4S Fleet Management Dashboard
 // Configuration
 const CONFIG = {
     supabase: {
@@ -9,1378 +8,409 @@ const CONFIG = {
         offline: '180CqEujgBjJPjP9eU8C--xMj-VTBSrRUrM_98-S0gjo',
         speed: '1y499rxvnlTY8JSp5eyI_ZEm_4c2rDm7hNim3VFH8PSk',
         alerts: '1Et8hgNDrZDuQbAHh7jvFpi0bsebVBcPsnZELPAYMu6U'
-    },
-    app: {
-        name: 'G4S Fleet Dashboard',
-        version: '2.0.0',
-        updateInterval: 300000 // 5 minutes
     }
-};
-
-// Global State Management
-const AppState = {
-    currentUser: { role: 'Admin', name: 'Fleet Manager' },
-    currentTheme: localStorage.getItem('dashboard-theme') || 'light',
-    currentPeriod: 'daily',
-    currentTab: 'offline',
-    filters: {
-        search: '',
-        city: '',
-        vehicle: '',
-        status: ''
-    },
-    data: {
-        offline: [],
-        speed: [],
-        alerts: [],
-        historical: {}
-    },
-    charts: {},
-    isLoading: false,
-    lastUpdate: null
 };
 
 // Global variables
 let supabaseClient;
-let installPrompt = null;
+let currentData = { offline: [], speed: [], alerts: [] };
+let charts = {};
+let currentTab = 'offline';
+let currentPeriod = 'daily';
 
 // Initialize application
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 Initializing Enhanced G4S Dashboard v' + CONFIG.app.version);
-    
     initializeApp();
-    setupEventListeners();
-    applyTheme(AppState.currentTheme);
-    setupPWA();
-    updateLastUpdated();
-    loadAllData();
-    
-    // Auto-refresh data
-    setInterval(() => {
-        if (!AppState.isLoading) {
-            loadAllData();
-        }
-    }, CONFIG.app.updateInterval);
 });
 
-// Initialize core application components
 function initializeApp() {
+    console.log('Initializing G4S Dashboard v2.0...');
     initializeSupabase();
-    initializeAnimations();
-    setupRoleManagement();
-    console.log('✅ Core application initialized');
+    setupEventListeners();
+    loadInitialData();
+    startAutoRefresh();
+    
+    // Update last updated time every minute
+    setInterval(() => {
+        const now = new Date();
+        document.querySelector('.logo-section p').textContent = 
+            `Last updated: ${now.toLocaleTimeString()}`;
+    }, 60000);
 }
 
-// Initialize Supabase
 function initializeSupabase() {
     try {
         if (typeof supabase !== 'undefined') {
             supabaseClient = supabase.createClient(CONFIG.supabase.url, CONFIG.supabase.key);
-            console.log('✅ Supabase connected');
-        } else {
-            console.warn('⚠️ Supabase not available - running in offline mode');
+            console.log('Supabase initialized successfully');
         }
     } catch (error) {
-        console.error('❌ Supabase initialization error:', error);
+        console.error('Supabase initialization error:', error);
     }
 }
 
-// Initialize animations and effects
-function initializeAnimations() {
-    // Add staggered animation delays to cards
-    const cards = document.querySelectorAll('.animate-card');
-    cards.forEach((card, index) => {
-        card.style.animationDelay = `${(index * 0.1) + 0.1}s`;
-    });
-}
-
-// Setup all event listeners
 function setupEventListeners() {
+    // Navigation
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', () => switchTab(item.dataset.tab));
+    });
+
+    // Report period toggle
+    document.querySelectorAll('.toggle-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchPeriod(btn.dataset.period));
+    });
+
     // Theme toggle
     document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
-    
-    // Role toggle
-    document.getElementById('role-toggle').addEventListener('click', toggleUserRole);
-    
-    // Period toggle
-    document.querySelectorAll('.period-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => changePeriod(e.target.dataset.period));
-    });
-    
-    // Tab navigation
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
-    });
 
     // Date selector
     document.getElementById('date-select').addEventListener('change', function() {
-        console.log('📅 Date changed to:', this.value);
-        loadDateBasedData(this.value);
+        loadDataForCurrentTab();
     });
 
-    // Smart filters and search
-    setupSmartFilters();
+    // Search
+    document.getElementById('global-search').addEventListener('input', handleSearch);
 
-    // Export buttons
-    document.getElementById('export-pdf').addEventListener('click', exportToPDF);
-    document.getElementById('export-excel').addEventListener('click', exportToExcel);
-    document.getElementById('refresh-btn').addEventListener('click', refreshData);
+    // Buttons
+    document.getElementById('refresh-btn').addEventListener('click', loadDataForCurrentTab);
+    document.getElementById('export-btn').addEventListener('click', exportToPDF);
 
     // Modal events
     setupModalEvents();
     
-    // AI Insights
-    document.getElementById('regenerate-insights').addEventListener('click', generateAIInsights);
-    
-    // Keyboard shortcuts
-    setupKeyboardShortcuts();
+    // Table filters
+    setupTableFilters();
 }
 
-// Setup smart filters and search functionality
-function setupSmartFilters() {
-    const searchInput = document.getElementById('global-search');
-    const clearSearchBtn = document.getElementById('clear-search');
-    const filterCity = document.getElementById('filter-city');
-    const filterVehicle = document.getElementById('filter-vehicle');
-    const filterStatus = document.getElementById('filter-status');
+function setupModalEvents() {
+    const modal = document.getElementById('status-modal');
+    const closeBtn = document.getElementById('modal-close');
+    const cancelBtn = document.getElementById('cancel-status');
+    const saveBtn = document.getElementById('save-status');
 
-    // Debounced search
-    let searchTimeout;
-    searchInput.addEventListener('input', function() {
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(() => {
-            AppState.filters.search = this.value.toLowerCase();
-            applyFilters();
-        }, 300);
-    });
+    closeBtn.addEventListener('click', closeModal);
+    cancelBtn.addEventListener('click', closeModal);
+    saveBtn.addEventListener('click', saveVehicleStatus);
 
-    clearSearchBtn.addEventListener('click', function() {
-        searchInput.value = '';
-        AppState.filters.search = '';
-        resetAllFilters();
-        applyFilters();
-    });
-
-    // Cascading filters
-    filterCity.addEventListener('change', function() {
-        AppState.filters.city = this.value;
-        updateDependentFilters();
-        applyFilters();
-    });
-
-    filterVehicle.addEventListener('change', function() {
-        AppState.filters.vehicle = this.value;
-        applyFilters();
-    });
-
-    filterStatus.addEventListener('change', function() {
-        AppState.filters.status = this.value;
-        applyFilters();
-    });
-
-    // Table-specific search inputs
-    setupTableSearch('offline-search', 'offline-table');
-    setupTableSearch('alerts-search', 'alerts-table');
-    setupTableSearch('speed-search', 'speed-table');
-}
-
-// Setup table-specific search
-function setupTableSearch(inputId, tableId) {
-    const input = document.getElementById(inputId);
-    if (input) {
-        let searchTimeout;
-        input.addEventListener('input', function() {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => {
-                filterTable(tableId, this.value.toLowerCase());
-            }, 200);
-        });
-    }
-}
-
-// Filter table rows based on search term
-function filterTable(tableId, searchTerm) {
-    const table = document.getElementById(tableId);
-    const rows = table.querySelectorAll('tbody tr');
-    
-    rows.forEach(row => {
-        const text = row.textContent.toLowerCase();
-        const isVisible = searchTerm === '' || text.includes(searchTerm);
-        row.style.display = isVisible ? '' : 'none';
-        
-        if (isVisible) {
-            row.style.animation = 'fadeIn 0.3s ease';
-        }
+    window.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
     });
 }
 
-// Update dependent filters based on current selection
-function updateDependentFilters() {
-    const vehicleFilter = document.getElementById('filter-vehicle');
-    const selectedCity = AppState.filters.city;
-    
-    // Clear and repopulate vehicle filter
-    vehicleFilter.innerHTML = '<option value="">All Vehicles</option>';
-    
-    let vehicles = new Set();
-    
-    // Collect vehicles from all data sources
-    [...AppState.data.offline, ...AppState.data.speed, ...AppState.data.alerts].forEach(item => {
-        const vehicle = item.plateNo || item['Vehicle Number'] || '';
-        const company = item.company || item.client || '';
-        
-        if (vehicle && (selectedCity === '' || company.includes(selectedCity))) {
-            vehicles.add(vehicle);
-        }
-    });
-    
-    // Add vehicles to filter
-    Array.from(vehicles).sort().forEach(vehicle => {
-        const option = document.createElement('option');
-        option.value = vehicle;
-        option.textContent = vehicle;
-        vehicleFilter.appendChild(option);
-    });
-}
-
-// Apply all active filters
-function applyFilters() {
-    const filteredData = {
-        offline: filterDataArray(AppState.data.offline, 'offline'),
-        speed: filterDataArray(AppState.data.speed, 'speed'),
-        alerts: filterDataArray(AppState.data.alerts, 'alerts')
-    };
-
-    // Update UI with filtered data
-    updateOfflineUI(filteredData.offline);
-    updateSpeedUI(filteredData.speed);
-    updateAIAlertsUI(filteredData.alerts);
-    
-    showFilterResults(filteredData);
-}
-
-// Filter data array based on current filters
-function filterDataArray(data, type) {
-    return data.filter(item => {
-        const vehicleField = item.plateNo || item['Vehicle Number'] || '';
-        const companyField = item.company || item.client || '';
-        const statusField = getItemStatus(item, type);
-        
-        // Search filter
-        if (AppState.filters.search) {
-            const searchText = `${vehicleField} ${companyField} ${statusField} ${JSON.stringify(item)}`.toLowerCase();
-            if (!searchText.includes(AppState.filters.search)) {
-                return false;
-            }
-        }
-        
-        // City filter
-        if (AppState.filters.city && !companyField.includes(AppState.filters.city)) {
-            return false;
-        }
-        
-        // Vehicle filter
-        if (AppState.filters.vehicle && vehicleField !== AppState.filters.vehicle) {
-            return false;
-        }
-        
-        // Status filter
-        if (AppState.filters.status && !statusField.includes(AppState.filters.status)) {
-            return false;
-        }
-        
-        return true;
-    });
-}
-
-// Get item status for filtering
-function getItemStatus(item, type) {
-    switch (type) {
-        case 'offline':
-            const hours = parseFloat(item['Offline Since (hrs)']) || 0;
-            return hours > 0 ? 'Offline' : 'Online';
-        case 'speed':
-            return item.speed >= 90 ? 'High Risk' : item.speed >= 75 ? 'Medium Risk' : 'Low Risk';
-        case 'alerts':
-            return item.alarmType || 'Unknown';
-        default:
-            return '';
-    }
-}
-
-// Show filter results summary
-function showFilterResults(filteredData) {
-    const totalResults = filteredData.offline.length + filteredData.speed.length + filteredData.alerts.length;
-    
-    // You can add a results summary UI element here
-    console.log(`🔍 Filter results: ${totalResults} items found`);
-}
-
-// Reset all filters
-function resetAllFilters() {
-    AppState.filters = { search: '', city: '', vehicle: '', status: '' };
-    document.getElementById('filter-city').value = '';
-    document.getElementById('filter-vehicle').value = '';
-    document.getElementById('filter-status').value = '';
-}
-
-// Theme management
-function toggleTheme() {
-    const newTheme = AppState.currentTheme === 'light' ? 'dark' : 'light';
-    applyTheme(newTheme);
-}
-
-function applyTheme(theme) {
-    AppState.currentTheme = theme;
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('dashboard-theme', theme);
-    
-    const themeIcon = document.querySelector('.theme-icon');
-    themeIcon.textContent = theme === 'light' ? '🌙' : '☀️';
-    
-    // Update chart colors for theme
-    updateChartsForTheme(theme);
-    
-    console.log(`🎨 Theme switched to: ${theme}`);
-}
-
-// Update chart colors based on theme
-function updateChartsForTheme(theme) {
-    const isDark = theme === 'dark';
-    const textColor = isDark ? '#e2e8f0' : '#333333';
-    const gridColor = isDark ? '#374151' : '#e1e5e9';
-    
-    // Update all existing charts
-    Object.values(AppState.charts).forEach(chart => {
-        if (chart && chart.options) {
-            chart.options.plugins = chart.options.plugins || {};
-            chart.options.plugins.legend = chart.options.plugins.legend || {};
-            chart.options.plugins.legend.labels = { color: textColor };
-            
-            if (chart.options.scales) {
-                Object.values(chart.options.scales).forEach(scale => {
-                    scale.ticks = scale.ticks || {};
-                    scale.ticks.color = textColor;
-                    scale.grid = scale.grid || {};
-                    scale.grid.color = gridColor;
-                });
-            }
-            
-            chart.update('none');
-        }
-    });
-}
-
-// Role management
-function setupRoleManagement() {
-    updateRoleUI();
-}
-
-function toggleUserRole() {
-    const newRole = AppState.currentUser.role === 'Admin' ? 'Viewer' : 'Admin';
-    AppState.currentUser.role = newRole;
-    updateRoleUI();
-}
-
-function updateRoleUI() {
-    const roleElement = document.getElementById('current-role');
-    const toggleBtn = document.getElementById('role-toggle');
-    const container = document.querySelector('.dashboard-container');
-    
-    roleElement.textContent = AppState.currentUser.role;
-    toggleBtn.textContent = `Switch to ${AppState.currentUser.role === 'Admin' ? 'Viewer' : 'Admin'}`;
-    
-    // Apply role-based visibility
-    if (AppState.currentUser.role === 'Viewer') {
-        container.classList.add('viewer-mode');
-    } else {
-        container.classList.remove('viewer-mode');
-    }
-    
-    console.log(`👤 Role changed to: ${AppState.currentUser.role}`);
-}
-
-// Period management (Daily/Weekly/Monthly) - FIXED
-function changePeriod(period) {
-    AppState.currentPeriod = period;
-    
-    // Update UI
-    document.querySelectorAll('.period-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.period === period);
-    });
-    
-    // Update date selector for period
-    updateDateSelectorForPeriod(period);
-    
-    // IMPORTANT: Load data immediately for the new period
-    console.log(`📊 Period changed to: ${period}`);
-    loadDataForPeriod(period);
-}
-
-function updateDateSelectorForPeriod(period) {
-    const dateSelect = document.getElementById('date-select');
-    dateSelect.innerHTML = '';
-    
-    const currentDate = new Date();
-    
-    switch (period) {
-        case 'daily':
-            for (let i = 0; i < 7; i++) {
-                const date = new Date(currentDate);
-                date.setDate(date.getDate() - i);
-                const dateStr = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
-                const option = new Option(dateStr, dateStr);
-                dateSelect.appendChild(option);
-            }
-            break;
-            
-        case 'weekly':
-            for (let i = 0; i < 4; i++) {
-                const startDate = new Date(currentDate);
-                startDate.setDate(startDate.getDate() - (i * 7));
-                const endDate = new Date(startDate);
-                endDate.setDate(endDate.getDate() - 6);
-                const weekStr = `Week ${endDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} - ${startDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
-                const option = new Option(weekStr, weekStr);
-                dateSelect.appendChild(option);
-            }
-            break;
-            
-        case 'monthly':
-            for (let i = 0; i < 6; i++) {
-                const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
-                const monthStr = date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
-                const option = new Option(monthStr, monthStr);
-                dateSelect.appendChild(option);
-            }
-            break;
-    }
-}
-
-async function loadDataForPeriod(period) {
-    console.log(`Loading data for period: ${period}`);
-    showLoading(true);
-    AppState.isLoading = true;
-    
-    try {
-        switch (period) {
-            case 'daily':
-                // Load single day data
-                await loadDailyData();
-                break;
-            case 'weekly':
-                // Load and aggregate 7 days of data
-                await loadWeeklyData();
-                break;
-            case 'monthly':
-                // Load and aggregate 30 days of data  
-                await loadMonthlyData();
-                break;
-        }
-        
-        applyFilters();
-        console.log(`✅ ${period} data loaded successfully`);
-        
-    } catch (error) {
-        console.error(`❌ Error loading ${period} data:`, error);
-        showNotification(`Error loading ${period} data`, 'error');
-    } finally {
-        AppState.isLoading = false;
-        showLoading(false);
-    }
-}
-
-// Load single day data (current functionality)
-async function loadDailyData() {
-    const selectedDate = document.getElementById('date-select').value;
-    await Promise.all([
-        loadOfflineData(),
-        loadSpeedData(selectedDate),
-        loadAIAlertsData(selectedDate)
-    ]);
-}
-
-// Auto-detect and load weekly data with enhanced debugging
-async function loadWeeklyData() {
-    console.log('📊 Auto-detecting and loading weekly data...');
-    
-    const availableSheets = await discoverAvailableSheets();
-    console.log('🔍 Discovery results:', availableSheets);
-    
-    if (availableSheets.speed.length === 0 && availableSheets.alerts.length === 0) {
-        console.log('⚠️ No additional sheets found, using current date data only');
-        await loadDailyData();
-        return;
-    }
-    
-    console.log(`Found ${availableSheets.speed.length} speed sheets and ${availableSheets.alerts.length} alert sheets`);
-    
-    let aggregatedSpeed = [];
-    let aggregatedAlerts = [];
-    
-    // Load speed data from all available sheets
-    for (const sheetInfo of availableSheets.speed) {
-        try {
-            const speedData = await loadSpeedDataByGID(sheetInfo.gid, sheetInfo.name);
-            aggregatedSpeed = [...aggregatedSpeed, ...speedData];
-            console.log(`✅ Loaded ${speedData.length} speed records from ${sheetInfo.name}`);
-        } catch (error) {
-            console.log(`⚠️ Failed to load speed data from ${sheetInfo.name}:`, error.message);
-        }
-    }
-    
-    // Load alerts data from all available sheets
-    for (const sheetInfo of availableSheets.alerts) {
-        try {
-            const alertsData = await loadAlertsDataByGID(sheetInfo.gid, sheetInfo.name);
-            aggregatedAlerts = [...aggregatedAlerts, ...alertsData];
-            console.log(`✅ Loaded ${alertsData.length} alert records from ${sheetInfo.name}`);
-        } catch (error) {
-            console.log(`⚠️ Failed to load alerts data from ${sheetInfo.name}:`, error.message);
-        }
-    }
-    
-    // Load offline data (same for all periods)
-    await loadOfflineData();
-    
-    // Store aggregated data
-    AppState.data.speed = aggregatedSpeed;
-    AppState.data.alerts = aggregatedAlerts;
-    
-    console.log(`✅ Weekly data loaded: ${aggregatedSpeed.length} speed violations, ${aggregatedAlerts.length} alerts`);
-}
-
-// Smart date-based sheet discovery using systematic GID testing
-async function discoverAvailableSheets() {
-    console.log('🔍 Smart discovery: Finding sheets by date patterns...');
-    
-    const speedSheets = [];
-    const alertsSheets = [];
-    
-    // Generate expected date patterns for the last 60 days
-    const datePatterns = generateDatePatterns();
-    console.log(`📅 Generated ${datePatterns.length} date patterns to test`);
-    
-    // Test systematic GID ranges with better coverage
-    const gidRanges = [
-        // Known working GIDs first
-        ['293366971', '1378822335'],
-        // Sequential from 0-100 
-        Array.from({length: 100}, (_, i) => i.toString()),
-        // Higher ranges that Google often uses
-        Array.from({length: 50}, (_, i) => (1000000000 + i * 1000000).toString()),
-        Array.from({length: 50}, (_, i) => (2000000000 + i * 1000000).toString()),
-        // Random-like patterns
-        ['123456789', '987654321', '111111111', '222222222', '333333333', '444444444', '555555555']
-    ].flat();
-    
-    console.log(`🔍 Testing ${gidRanges.length} GID patterns systematically...`);
-    
-    // Test speed sheets with better error handling
-    let speedFound = 0;
-    for (let i = 0; i < gidRanges.length && speedFound < 30; i++) {
-        const gid = gidRanges[i];
-        
-        try {
-            const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.speed}/export?format=csv&gid=${gid}`;
-            const csvText = await fetchWithTimeout(csvUrl, 3000);
-            
-            if (csvText && csvText.length > 200) {
-                const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-                
-                // Check if it's speed data with more flexible column detection
-                if (parsed.data.length > 5 && hasSpeedColumns(parsed.data[0])) {
-                    const sheetName = extractDateFromData(parsed.data, gid);
-                    
-                    // Only include if we can identify a valid date
-                    if (sheetName && isValidDateTab(sheetName)) {
-                        speedSheets.push({ 
-                            gid: gid, 
-                            name: sheetName, 
-                            rows: parsed.data.length,
-                            date: parseDateFromName(sheetName)
-                        });
-                        speedFound++;
-                        console.log(`✅ Speed sheet: ${sheetName} (GID: ${gid}) - ${parsed.data.length} rows`);
-                    }
-                }
-            }
-        } catch (error) {
-            // Continue silently for non-existent sheets
-            if (i % 20 === 0) console.log(`⏳ Tested ${i}/${gidRanges.length} GIDs for speed...`);
-        }
-    }
-    
-    // Test alerts sheets
-    let alertsFound = 0;
-    for (let i = 0; i < gidRanges.length && alertsFound < 30; i++) {
-        const gid = gidRanges[i];
-        
-        try {
-            const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.alerts}/export?format=csv&gid=${gid}`;
-            const csvText = await fetchWithTimeout(csvUrl, 3000);
-            
-            if (csvText && csvText.length > 200) {
-                const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-                
-                // Check if it's alerts data
-                if (parsed.data.length > 5 && hasAlertColumns(parsed.data[0])) {
-                    const sheetName = extractDateFromData(parsed.data, gid);
-                    
-                    if (sheetName && isValidDateTab(sheetName)) {
-                        alertsSheets.push({ 
-                            gid: gid, 
-                            name: sheetName, 
-                            rows: parsed.data.length,
-                            date: parseDateFromName(sheetName)
-                        });
-                        alertsFound++;
-                        console.log(`✅ Alerts sheet: ${sheetName} (GID: ${gid}) - ${parsed.data.length} rows`);
-                    }
-                }
-            }
-        } catch (error) {
-            if (i % 20 === 0) console.log(`⏳ Tested ${i}/${gidRanges.length} GIDs for alerts...`);
-        }
-    }
-    
-    // Sort by date (newest first)
-    speedSheets.sort((a, b) => b.date - a.date);
-    alertsSheets.sort((a, b) => b.date - a.date);
-    
-    const discoveredSheets = { speed: speedSheets, alerts: alertsSheets };
-    
-    // Cache results
-    localStorage.setItem('discovered-sheets', JSON.stringify(discoveredSheets));
-    localStorage.setItem('sheets-discovery-time', Date.now().toString());
-    
-    console.log(`🎯 Discovery complete: ${speedSheets.length} speed sheets, ${alertsSheets.length} alert sheets`);
-    return discoveredSheets;
-}
-
-// Check if data has speed columns
-function hasSpeedColumns(firstRow) {
-    const speedColumns = ['Speed(Km/h)', 'Speed', 'speed', 'Speed (Km/h)', 'Speed(km/h)'];
-    return speedColumns.some(col => firstRow.hasOwnProperty(col));
-}
-
-// Check if data has alert columns  
-function hasAlertColumns(firstRow) {
-    const alertColumns = ['Alarm Type', 'Alert Type', 'alarm', 'alert', 'Alarm', 'Alert'];
-    return alertColumns.some(col => firstRow.hasOwnProperty(col));
-}
-
-// Extract date from sheet data
-function extractDateFromData(data, gid) {
-    // Try to find date in first few rows
-    for (let i = 0; i < Math.min(5, data.length); i++) {
-        const row = data[i];
-        
-        // Check common date fields
-        const dateFields = ['Date', 'Starting time', 'Timestamp', 'Time', 'date', 'time'];
-        
-        for (const field of dateFields) {
-            if (row[field]) {
-                const dateStr = row[field].toString();
-                
-                // Try to extract date patterns like "25 August" or "29-07-25"
-                const pattern1 = dateStr.match(/(\d{1,2})\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i);
-                if (pattern1) {
-                    return `${pattern1[1]} ${pattern1[2]}`;
-                }
-                
-                const pattern2 = dateStr.match(/(\d{1,2})-(\d{1,2})-(\d{2})/);
-                if (pattern2) {
-                    return `${pattern2[1]}-${pattern2[2]}-${pattern2[3]}`;
-                }
-                
-                const pattern3 = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
-                if (pattern3) {
-                    return `${pattern3[1]}-${pattern3[2]}-${pattern3[3].slice(-2)}`;
-                }
-            }
-        }
-    }
-    
-    // Fallback: use known GID mappings
-    const knownGIDs = {
-        '0': '24 August',
-        '1': '23 August',
-        '293366971': '25 August',
-        '1378822335': '25 August'
-    };
-    
-    return knownGIDs[gid] || null;
-}
-
-// Check if sheet name represents a valid date tab
-function isValidDateTab(name) {
-    if (!name) return false;
-    
-    // Pattern 1: "DD Month" like "25 August"
-    if (/^\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i.test(name)) {
-        return true;
-    }
-    
-    // Pattern 2: "DD-MM-YY" like "29-07-25"  
-    if (/^\d{1,2}-\d{1,2}-\d{2}$/.test(name)) {
-        return true;
-    }
-    
-    return false;
-}
-
-// Parse date from sheet name for sorting
-function parseDateFromName(name) {
-    try {
-        // Handle "DD Month" format
-        const pattern1 = name.match(/^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i);
-        if (pattern1) {
-            const currentYear = new Date().getFullYear();
-            return new Date(`${pattern1[1]} ${pattern1[2]} ${currentYear}`);
-        }
-        
-        // Handle "DD-MM-YY" format
-        const pattern2 = name.match(/^(\d{1,2})-(\d{1,2})-(\d{2})$/);
-        if (pattern2) {
-            const year = 2000 + parseInt(pattern2[3]);
-            const month = parseInt(pattern2[2]) - 1; // JS months are 0-based
-            const day = parseInt(pattern2[1]);
-            return new Date(year, month, day);
-        }
-        
-        return new Date(); // Default to current date for sorting
-    } catch (error) {
-        return new Date();
-    }
-}
-
-// Generate expected date patterns for recent dates
-function generateDatePatterns() {
-    const patterns = [];
-    const currentDate = new Date();
-    
-    // Generate last 60 days in both formats
-    for (let i = 0; i < 60; i++) {
-        const date = new Date(currentDate);
-        date.setDate(date.getDate() - i);
-        
-        // Format 1: "25 August"
-        const monthName = date.toLocaleDateString('en-GB', { month: 'long' });
-        patterns.push(`${date.getDate()} ${monthName}`);
-        
-        // Format 2: "29-07-25"
-        const day = date.getDate().toString().padStart(2, '0');
-        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-        const year = date.getFullYear().toString().slice(-2);
-        patterns.push(`${day}-${month}-${year}`);
-    }
-    
-    return patterns;
-}
-
-// Get cached sheet discovery or rediscover if stale
-async function getCachedOrDiscoverSheets() {
-    const cached = localStorage.getItem('discovered-sheets');
-    const discoveryTime = localStorage.getItem('sheets-discovery-time');
-    
-    // Use cache if less than 1 hour old
-    if (cached && discoveryTime && (Date.now() - parseInt(discoveryTime)) < 3600000) {
-        console.log('📋 Using cached sheet discovery');
-        return JSON.parse(cached);
-    }
-    
-    console.log('🔄 Cache expired, rediscovering sheets...');
-    return await discoverAvailableSheets();
-}
-
-// Fetch with timeout to avoid hanging on non-existent sheets
-async function fetchWithTimeout(url, timeout = 5000) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-    
-    try {
-        const response = await fetch(url, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        
-        if (response.ok) {
-            return await response.text();
-        }
-        throw new Error('Response not ok');
-    } catch (error) {
-        clearTimeout(timeoutId);
-        throw error;
-    }
-}
-
-// Determine sheet name from data content or GID
-async function getSheetNameFromData(data, gid) {
-    // Try to extract date from data if available
-    if (data.length > 0) {
-        const firstRow = data[0];
-        
-        // Look for date patterns in the data
-        const dateFields = ['Date', 'Starting time', 'Timestamp', 'Time'];
-        for (const field of dateFields) {
-            if (firstRow[field]) {
-                const dateMatch = firstRow[field].match(/(\d{1,2})\s*(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i);
-                if (dateMatch) {
-                    return `${dateMatch[1]} ${dateMatch[2]}`;
-                }
-            }
-        }
-    }
-    
-    // Fallback to GID-based naming
-    const knownGIDs = {
-        '0': '24 August',
-        '1': '23 August', 
-        '293366971': '25 August',
-        '1378822335': '25 August'
-    };
-    
-    return knownGIDs[gid] || `Sheet ${gid}`;
-}
-
-// Load speed data by GID
-async function loadSpeedDataByGID(gid, sheetName) {
-    const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.speed}/export?format=csv&gid=${gid}`;
-    const csvText = await fetchWithFallback(csvUrl);
-    
-    if (csvText) {
-        const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-        
-        return parsed.data.filter(row => {
-            const speed = parseFloat(row['Speed(Km/h)']) || 0;
-            return speed >= 75 && row['Plate NO.'];
-        }).map(row => ({
-            plateNo: row['Plate NO.'] || '',
-            company: row['Company'] || '',
-            startingTime: row['Starting time'] || '',
-            speed: parseFloat(row['Speed(Km/h)']) || 0,
-            location: row['Location'] || 'Unknown',
-            date: sheetName,
-            gid: gid,
-            riskLevel: parseFloat(row['Speed(Km/h)']) >= 90 ? 'High' : 'Medium',
-            violationType: parseFloat(row['Speed(Km/h)']) >= 90 ? 'Alarm' : 'Warning'
-        }));
-    }
-    return [];
-}
-
-// Load alerts data by GID  
-async function loadAlertsDataByGID(gid, sheetName) {
-    const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.alerts}/export?format=csv&gid=${gid}`;
-    const csvText = await fetchWithFallback(csvUrl);
-    
-    if (csvText) {
-        const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-        
-        return parsed.data.filter(row => {
-            return row['Plate NO.'] && row['Alarm Type'];
-        }).map(row => ({
-            plateNo: row['Plate NO.'] || '',
-            company: row['Company'] || '',
-            alarmType: row['Alarm Type'] || '',
-            startingTime: row['Starting time'] || '',
-            imageLink: row['Image Link'] || '',
-            location: row['Location'] || 'Unknown',
-            date: sheetName,
-            gid: gid,
-            priority: calculateAlertPriority(row['Alarm Type'] || ''),
-            riskScore: calculateRiskScore(row['Alarm Type'] || '')
-        }));
-    }
-    return [];
-}
-
-// Load and aggregate monthly data using auto-discovery
-async function loadMonthlyData() {
-    console.log('📊 Auto-detecting and loading monthly data...');
-    
-    const availableSheets = await getCachedOrDiscoverSheets();
-    console.log(`Found ${availableSheets.speed.length} speed sheets and ${availableSheets.alerts.length} alert sheets for monthly view`);
-    
-    let aggregatedSpeed = [];
-    let aggregatedAlerts = [];
-    
-    // Load all available data for monthly view
-    for (const sheetInfo of availableSheets.speed) {
-        try {
-            const speedData = await loadSpeedDataByGID(sheetInfo.gid, sheetInfo.name);
-            aggregatedSpeed = [...aggregatedSpeed, ...speedData];
-            console.log(`✅ Monthly: Loaded ${speedData.length} speed records from ${sheetInfo.name}`);
-        } catch (error) {
-            console.log(`⚠️ Failed to load monthly speed data from ${sheetInfo.name}:`, error.message);
-        }
-    }
-    
-    for (const sheetInfo of availableSheets.alerts) {
-        try {
-            const alertsData = await loadAlertsDataByGID(sheetInfo.gid, sheetInfo.name);
-            aggregatedAlerts = [...aggregatedAlerts, ...alertsData];
-            console.log(`✅ Monthly: Loaded ${alertsData.length} alert records from ${sheetInfo.name}`);
-        } catch (error) {
-            console.log(`⚠️ Failed to load monthly alerts data from ${sheetInfo.name}:`, error.message);
-        }
-    }
-    
-    // Load offline data
-    await loadOfflineData();
-    
-    // Add monthly period marker
-    AppState.data.speed = aggregatedSpeed.map(item => ({ ...item, period: 'monthly' }));
-    AppState.data.alerts = aggregatedAlerts.map(item => ({ ...item, period: 'monthly' }));
-    
-    console.log(`✅ Monthly data loaded: ${aggregatedSpeed.length} speed violations, ${aggregatedAlerts.length} alerts`);
-}
-
-// Update date selector based on discovered sheets
-async function updateDateSelectorForPeriod(period) {
-    const dateSelect = document.getElementById('date-select');
-    dateSelect.innerHTML = '';
-    
-    if (period === 'daily') {
-        // For daily, show individual discovered sheets
-        const availableSheets = await getCachedOrDiscoverSheets();
-        const uniqueDates = new Set();
-        
-        // Collect unique dates from both speed and alerts sheets
-        [...availableSheets.speed, ...availableSheets.alerts].forEach(sheet => {
-            uniqueDates.add(sheet.name);
-        });
-        
-        const sortedDates = Array.from(uniqueDates).sort((a, b) => {
-            // Try to sort by date if possible, otherwise alphabetically
-            const dateA = parseDate(a);
-            const dateB = parseDate(b);
-            if (dateA && dateB) {
-                return dateB - dateA; // Most recent first
-            }
-            return a.localeCompare(b);
-        });
-        
-        sortedDates.forEach(date => {
-            const option = new Option(date, date);
-            dateSelect.appendChild(option);
-        });
-        
-        console.log(`📅 Daily date selector updated with ${sortedDates.length} discovered dates`);
-        
-    } else if (period === 'weekly') {
-        // For weekly, show week ranges
-        const currentDate = new Date();
-        for (let i = 0; i < 4; i++) {
-            const startDate = new Date(currentDate);
-            startDate.setDate(startDate.getDate() - (i * 7));
-            const endDate = new Date(startDate);
-            endDate.setDate(endDate.getDate() - 6);
-            
-            const weekStr = `Week ${endDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} - ${startDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
-            const option = new Option(weekStr, weekStr);
-            dateSelect.appendChild(option);
-        }
-        
-    } else if (period === 'monthly') {
-        // For monthly, show month ranges
-        const currentDate = new Date();
-        for (let i = 0; i < 6; i++) {
-            const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
-            const monthStr = date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
-            const option = new Option(monthStr, monthStr);
-            dateSelect.appendChild(option);
-        }
-    }
-}
-
-// Helper function to parse date from sheet name
-function parseDate(dateString) {
-    try {
-        // Try to parse dates like "25 August", "1 September", etc.
-        const currentYear = new Date().getFullYear();
-        const parsed = new Date(`${dateString} ${currentYear}`);
-        return isNaN(parsed.getTime()) ? null : parsed;
-    } catch {
-        return null;
-    }
-}
-
-// Enhanced daily data loading using auto-discovery
-async function loadDailyData() {
-    const selectedDate = document.getElementById('date-select').value;
-    console.log(`📅 Loading daily data for: ${selectedDate}`);
-    
-    const availableSheets = await getCachedOrDiscoverSheets();
-    
-    // Find matching sheets for the selected date
-    const matchingSpeedSheets = availableSheets.speed.filter(sheet => sheet.name === selectedDate);
-    const matchingAlertSheets = availableSheets.alerts.filter(sheet => sheet.name === selectedDate);
-    
-    let speedData = [];
-    let alertsData = [];
-    
-    // Load speed data from matching sheets
-    for (const sheet of matchingSpeedSheets) {
-        const data = await loadSpeedDataByGID(sheet.gid, sheet.name);
-        speedData = [...speedData, ...data];
-    }
-    
-    // Load alerts data from matching sheets
-    for (const sheet of matchingAlertSheets) {
-        const data = await loadAlertsDataByGID(sheet.gid, sheet.name);
-        alertsData = [...alertsData, ...data];
-    }
-    
-    // If no matching sheets found, fall back to old method
-    if (speedData.length === 0 && alertsData.length === 0) {
-        console.log(`⚠️ No matching sheets found for ${selectedDate}, using fallback method`);
-        await Promise.all([
-            loadSpeedData(selectedDate),
-            loadAIAlertsData(selectedDate)
-        ]);
-    } else {
-        AppState.data.speed = speedData;
-        AppState.data.alerts = alertsData;
-        console.log(`✅ Daily data loaded: ${speedData.length} speed violations, ${alertsData.length} alerts`);
-    }
-    
-    // Always load offline data
-    await loadOfflineData();
-}
-
-// Add a refresh sheets discovery function
-async function refreshSheetsDiscovery() {
-    console.log('🔄 Forcing sheets rediscovery...');
-    localStorage.removeItem('discovered-sheets');
-    localStorage.removeItem('sheets-discovery-time');
-    
-    showNotification('Refreshing available sheets...', 'info');
-    const sheets = await discoverAvailableSheets();
-    
-    showNotification(`Found ${sheets.speed.length + sheets.alerts.length} sheet tabs`, 'success');
-    
-    // Update the current period's date selector
-    await updateDateSelectorForPeriod(AppState.currentPeriod);
-    
-    return sheets;
-}
-
-// Helper function to load speed data for a specific date
-async function loadSpeedDataForDate(date) {
-    const gidMap = {
-        '25 August': '293366971',
-        '24 August': '0',
-        '23 August': '1'
-    };
-    
-    const gid = gidMap[date] || '293366971';
-    const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.speed}/export?format=csv&gid=${gid}`;
-    
-    try {
-        const csvText = await fetchWithFallback(csvUrl);
-        if (csvText) {
-            const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-            
-            return parsed.data.filter(row => {
-                const speed = parseFloat(row['Speed(Km/h)']) || 0;
-                return speed >= 75 && row['Plate NO.'];
-            }).map(row => ({
-                plateNo: row['Plate NO.'] || '',
-                company: row['Company'] || '',
-                startingTime: row['Starting time'] || '',
-                speed: parseFloat(row['Speed(Km/h)']) || 0,
-                location: row['Location'] || 'Unknown',
-                date: date,
-                riskLevel: parseFloat(row['Speed(Km/h)']) >= 90 ? 'High' : 'Medium',
-                violationType: parseFloat(row['Speed(Km/h)']) >= 90 ? 'Alarm' : 'Warning'
-            }));
-        }
-    } catch (error) {
-        console.log(`Failed to load speed data for ${date}:`, error.message);
-    }
-    
-    return [];
-}
-
-// Helper function to load alerts data for a specific date  
-async function loadAIAlertsDataForDate(date) {
-    const gidMap = {
-        '25 August': '1378822335',
-        '24 August': '0',
-        '23 August': '1'
-    };
-    
-    const gid = gidMap[date] || '1378822335';
-    const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.alerts}/export?format=csv&gid=${gid}`;
-    
-    try {
-        const csvText = await fetchWithFallback(csvUrl);
-        if (csvText) {
-            const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-            
-            return parsed.data.filter(row => {
-                return row['Plate NO.'] && row['Alarm Type'];
-            }).map(row => ({
-                plateNo: row['Plate NO.'] || '',
-                company: row['Company'] || '',
-                alarmType: row['Alarm Type'] || '',
-                startingTime: row['Starting time'] || '',
-                imageLink: row['Image Link'] || '',
-                location: row['Location'] || 'Unknown',
-                date: date,
-                priority: calculateAlertPriority(row['Alarm Type'] || ''),
-                riskScore: calculateRiskScore(row['Alarm Type'] || '')
-            }));
-        }
-    } catch (error) {
-        console.log(`Failed to load alerts data for ${date}:`, error.message);
-    }
-    
-    return [];
-}
-
-// Tab management
 function switchTab(tabName) {
-    console.log(`📑 Switching to tab: ${tabName}`);
-    AppState.currentTab = tabName;
+    currentTab = tabName;
     
-    // Update tab buttons
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.tab === tabName);
+    // Update navigation
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.remove('active');
     });
+    document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
 
-    // Update tab panes
+    // Update content
     document.querySelectorAll('.tab-pane').forEach(pane => {
-        pane.classList.toggle('active', pane.id === tabName);
+        pane.classList.remove('active');
     });
+    document.getElementById(tabName).classList.add('active');
+
+    // Show/hide report toggle
+    const reportToggle = document.getElementById('report-toggle');
+    if (tabName === 'ai-alerts' || tabName === 'speed') {
+        reportToggle.style.display = 'flex';
+    } else {
+        reportToggle.style.display = 'none';
+    }
+
+    loadDataForCurrentTab();
+}
+
+function switchPeriod(period) {
+    currentPeriod = period;
     
-    // Load specific data if needed
-    if (tabName === 'insights') {
-        generateAIInsights();
+    // Update toggle buttons
+    document.querySelectorAll('.toggle-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.querySelector(`[data-period="${period}"]`).classList.add('active');
+
+    // Update date selector based on period
+    updateDateSelector();
+    loadDataForCurrentTab();
+}
+
+function updateDateSelector() {
+    const dateSelect = document.getElementById('date-select');
+    dateSelect.innerHTML = '';
+    
+    if (currentPeriod === 'daily') {
+        dateSelect.innerHTML = `
+            <option value="25 August">25 August</option>
+            <option value="24 August">24 August</option>
+            <option value="23 August">23 August</option>
+        `;
+    } else if (currentPeriod === 'weekly') {
+        dateSelect.innerHTML = `
+            <option value="week-25-aug">Week of Aug 19-25</option>
+            <option value="week-18-aug">Week of Aug 12-18</option>
+            <option value="week-11-aug">Week of Aug 5-11</option>
+        `;
+    } else if (currentPeriod === 'monthly') {
+        dateSelect.innerHTML = `
+            <option value="august-2025">August 2025</option>
+            <option value="july-2025">July 2025</option>
+            <option value="june-2025">June 2025</option>
+        `;
     }
 }
 
-// Data loading functions
-async function loadAllData() {
-    if (AppState.isLoading) return;
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
     
-    console.log('📊 Loading all fleet data...');
+    document.documentElement.setAttribute('data-theme', newTheme);
+    
+    const themeToggle = document.getElementById('theme-toggle');
+    themeToggle.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+    
+    localStorage.setItem('theme', newTheme);
+}
+
+function showLoading(show = true) {
+    document.getElementById('loading').style.display = show ? 'flex' : 'none';
+}
+
+function loadInitialData() {
+    // Load saved theme
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    document.getElementById('theme-toggle').textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+    
+    // Load initial data
+    loadDataForCurrentTab();
+}
+
+async function loadDataForCurrentTab() {
     showLoading(true);
-    updateLastUpdated();
-    AppState.isLoading = true;
     
     try {
-        await Promise.all([
-            loadOfflineData(),
-            loadDateBasedData(document.getElementById('date-select').value)
-        ]);
-        
-        AppState.lastUpdate = new Date();
-        console.log('✅ All data loaded successfully');
-        
-        // Apply current filters
-        applyFilters();
-        
-        // Update insights if on insights tab
-        if (AppState.currentTab === 'insights') {
-            generateAIInsights();
+        switch(currentTab) {
+            case 'offline':
+                await loadOfflineData();
+                break;
+            case 'ai-alerts':
+                await loadAIAlertsData();
+                break;
+            case 'speed':
+                await loadSpeedData();
+                break;
         }
-        
     } catch (error) {
-        console.error('❌ Error loading data:', error);
-        showNotification('Error loading data. Please check your connection.', 'error');
+        console.error('Error loading data:', error);
+        showError('Failed to load data. Please check your internet connection and try again.');
     } finally {
-        AppState.isLoading = false;
         showLoading(false);
     }
 }
 
-// Enhanced offline data loading with better error handling and fallbacks
 async function loadOfflineData() {
-    console.log('🔴 Loading offline data...');
+    console.log('Loading live offline data...');
     
     try {
         const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.offline}/export?format=csv&gid=0`;
         let csvText = await fetchWithFallback(csvUrl);
         
         if (csvText) {
-            const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-            console.log(`📊 Parsed offline data: ${parsed.data.length} rows`);
-            
-            const filteredData = parsed.data.filter(row => {
-                const client = row.client?.toLowerCase() || '';
-                const offlineHours = parseFloat(row['Offline Since (hrs)']) || 0;
-                return client.includes('g4s') && offlineHours >= 24 && row['Vehicle Number'];
+            const parsed = Papa.parse(csvText, { 
+                header: true, 
+                skipEmptyLines: true,
+                transformHeader: header => header.trim()
             });
             
-            if (filteredData.length > 0) {
-                console.log(`✅ Live offline data loaded: ${filteredData.length} vehicles`);
-                AppState.data.offline = enhanceOfflineData(filteredData);
-                return;
-            }
+            // Filter G4S vehicles offline >= 24 hours
+            const filteredData = parsed.data.filter(row => {
+                const client = (row.client || row.Client || '').toLowerCase();
+                const offlineHours = parseFloat(row['Offline Since (hrs)'] || row['offline_hours'] || 0);
+                const vehicleNumber = row['Vehicle Number'] || row['vehicle_number'] || row['Vehicle'];
+                return client.includes('g4s') && offlineHours >= 24 && vehicleNumber;
+            });
+            
+            // Load existing status from Supabase
+            await loadExistingStatus(filteredData);
+            
+            currentData.offline = filteredData;
+            console.log(`Loaded ${filteredData.length} offline vehicles`);
+        } else {
+            throw new Error('No data received from sheets');
         }
+        
     } catch (error) {
-        console.log('⚠️ Offline data fetch failed:', error.message);
+        console.error('Offline data loading failed:', error);
+        // Fallback to cached data or sample data
+        currentData.offline = getCachedData('offline') || getSampleOfflineData();
     }
     
-    // Fallback to enhanced sample data
-    console.log('🔄 Using enhanced sample offline data');
-    AppState.data.offline = getEnhancedSampleOfflineData();
+    updateOfflineUI();
 }
 
-// Enhanced sample data with more realistic information
-function getEnhancedSampleOfflineData() {
-    return [
-        { client: 'G4S', 'Vehicle Number': 'AP39HS4926', 'Last Online': '2025-08-20', 'Offline Since (hrs)': '112', 'R/N': '', Remarks: 'Parked at depot', location: 'Hyderabad', status: 'Parking' },
-        { client: 'G4S', 'Vehicle Number': 'AS01EH6877', 'Last Online': '2025-05-12', 'Offline Since (hrs)': '2515', 'R/N': '', Remarks: 'Under maintenance', location: 'Guwahati', status: 'Technical' },
-        { client: 'G4S', 'Vehicle Number': 'BR01PK9758', 'Last Online': '2025-08-23', 'Offline Since (hrs)': '52', 'R/N': '', Remarks: 'Driver sick leave', location: 'Patna', status: 'Offline' },
-        { client: 'G4S', 'Vehicle Number': 'CG04MY9667', 'Last Online': '2025-05-09', 'Offline Since (hrs)': '2586', 'R/N': '', Remarks: 'GPS connectivity issue', location: 'Raipur', status: 'Technical' },
-        { client: 'G4S', 'Vehicle Number': 'CH01CK2912', 'Last Online': '2025-08-25', 'Offline Since (hrs)': '48', 'R/N': '', Remarks: 'Technical checkup pending', location: 'Chandigarh', status: 'Technical' },
-        { client: 'G4S', 'Vehicle Number': 'DL08CA1234', 'Last Online': '2025-08-26', 'Offline Since (hrs)': '36', 'R/N': '', Remarks: 'Route maintenance', location: 'Delhi', status: 'Parking' },
-        { client: 'G4S', 'Vehicle Number': 'MH12DE5678', 'Last Online': '2025-08-24', 'Offline Since (hrs)': '72', 'R/N': '', Remarks: 'Festival holiday', location: 'Mumbai', status: 'Parking' }
-    ];
+async function loadAIAlertsData() {
+    console.log('Loading live AI alerts data...');
+    
+    try {
+        if (currentPeriod === 'weekly') {
+            currentData.alerts = await loadWeeklyAlertsData();
+        } else if (currentPeriod === 'monthly') {
+            currentData.alerts = await loadMonthlyAlertsData();
+        } else {
+            currentData.alerts = await loadDailyAlertsData();
+        }
+        
+        console.log(`Loaded ${currentData.alerts.length} AI alerts`);
+        
+    } catch (error) {
+        console.error('AI Alerts data loading failed:', error);
+        currentData.alerts = getCachedData('alerts') || getSampleAlertsData();
+    }
+    
+    updateAIAlertsUI();
 }
 
-// Enhance offline data with additional computed fields
-function enhanceOfflineData(data) {
-    return data.map(item => ({
+async function loadSpeedData() {
+    console.log('Loading live speed data...');
+    
+    try {
+        if (currentPeriod === 'weekly') {
+            currentData.speed = await loadWeeklySpeedData();
+        } else if (currentPeriod === 'monthly') {
+            currentData.speed = await loadMonthlySpeedData();
+        } else {
+            currentData.speed = await loadDailySpeedData();
+        }
+        
+        console.log(`Loaded ${currentData.speed.length} speed violations`);
+        
+    } catch (error) {
+        console.error('Speed data loading failed:', error);
+        currentData.speed = getCachedData('speed') || getSampleSpeedData();
+    }
+    
+    updateSpeedUI();
+}
+
+// Live Data Loading Functions
+async function fetchWithFallback(url) {
+    let csvText = null;
+    
+    // Method 1: Direct fetch
+    try {
+        console.log('Direct fetch from:', url);
+        const response = await fetch(url);
+        if (response.ok) {
+            csvText = await response.text();
+            console.log('Direct fetch successful, data length:', csvText.length);
+            return csvText;
+        }
+    } catch (error) {
+        console.log('Direct fetch failed:', error.message);
+    }
+    
+    // Method 2: CORS proxy
+    try {
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+        console.log('Proxy fetch from:', proxyUrl);
+        const response = await fetch(proxyUrl);
+        if (response.ok) {
+            const data = await response.json();
+            csvText = data.contents;
+            console.log('Proxy fetch successful, data length:', csvText.length);
+            return csvText;
+        }
+    } catch (error) {
+        console.log('Proxy fetch failed:', error.message);
+    }
+    
+    return null;
+}
+
+async function loadDailyAlertsData() {
+    const selectedDate = document.getElementById('date-select').value;
+    const gidMap = {
+        '25 August': '1378822335',
+        '24 August': '0',
+        '23 August': '1'
+    };
+    
+    const gid = gidMap[selectedDate] || '1378822335';
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.alerts}/export?format=csv&gid=${gid}`;
+    
+    const csvText = await fetchWithFallback(csvUrl);
+    if (!csvText) throw new Error('Failed to fetch alerts data');
+    
+    const parsed = Papa.parse(csvText, { 
+        header: true, 
+        skipEmptyLines: true,
+        transformHeader: header => header.trim()
+    });
+    
+    const filteredData = parsed.data.filter(row => {
+        const plateNo = row['Plate NO.'] || row['plate_no'] || row['Vehicle'];
+        const alarmType = row['Alarm Type'] || row['alarm_type'] || row['Alert Type'];
+        return plateNo && alarmType;
+    }).map(row => ({
+        plateNo: row['Plate NO.'] || row['plate_no'] || row['Vehicle'] || '',
+        company: row['Company'] || row['company'] || '',
+        alarmType: row['Alarm Type'] || row['alarm_type'] || row['Alert Type'] || '',
+        startingTime: row['Starting time'] || row['starting_time'] || row['Time'] || '',
+        imageLink: row['Image Link'] || row['image_link'] || ''
+    }));
+    
+    cacheData('alerts', filteredData);
+    return filteredData;
+}
+
+async function loadWeeklyAlertsData() {
+    const promises = [];
+    const dates = ['25 August', '24 August', '23 August']; // Last 3 days for demo
+    
+    for (const date of dates) {
+        promises.push(loadSingleDayAlertsData(date));
+    }
+    
+    const dailyData = await Promise.all(promises);
+    const allAlerts = dailyData.flat();
+    
+    // Aggregate by vehicle and alert type
+    const aggregated = allAlerts.reduce((acc, alert) => {
+        const key = `${alert.plateNo}-${alert.alarmType}`;
+        if (!acc[key]) {
+            acc[key] = {
+                plateNo: alert.plateNo,
+                company: alert.company,
+                alarmType: alert.alarmType,
+                count: 0,
+                days: new Set()
+            };
+        }
+        acc[key].count++;
+        acc[key].days.add(alert.startingTime?.split(' ')[0] || '');
+        return acc;
+    }, {});
+    
+    return Object.values(aggregated).map(item => ({
         ...item,
-        riskLevel: calculateOfflineRisk(parseFloat(item['Offline Since (hrs)']) || 0),
-        location: extractLocationFromVehicle(item['Vehicle Number']),
-        estimatedCost: calculateOfflineCost(parseFloat(item['Offline Since (hrs)']) || 0)
+        avgPerDay: (item.count / Math.max(item.days.size, 1)).toFixed(1)
     }));
 }
 
-function calculateOfflineRisk(hours) {
-    if (hours > 168) return 'Critical'; // > 1 week
-    if (hours > 72) return 'High';      // > 3 days  
-    if (hours > 24) return 'Medium';    // > 1 day
-    return 'Low';
+async function loadMonthlyAlertsData() {
+    // For demo, multiply weekly by 4
+    const weeklyData = await loadWeeklyAlertsData();
+    return weeklyData.map(item => ({
+        ...item,
+        count: Math.round(item.count * 4.3), // ~30 days / 7 days
+        avgPerDay: item.avgPerDay
+    }));
 }
 
-function extractLocationFromVehicle(vehicleNumber) {
-    if (!vehicleNumber) return 'Unknown';
-    const stateCode = vehicleNumber.substring(0, 2).toUpperCase();
-    const stateMap = {
-        'AP': 'Andhra Pradesh', 'AS': 'Assam', 'BR': 'Bihar', 'CG': 'Chhattisgarh',
-        'CH': 'Chandigarh', 'DL': 'Delhi', 'MH': 'Maharashtra', 'HR': 'Haryana',
-        'TS': 'Telangana', 'KA': 'Karnataka', 'TN': 'Tamil Nadu', 'WB': 'West Bengal'
-    };
-    return stateMap[stateCode] || 'Unknown';
-}
-
-function calculateOfflineCost(hours) {
-    // Estimated cost per hour of vehicle downtime
-    const costPerHour = 250; // INR
-    return Math.round(hours * costPerHour);
-}
-
-// Enhanced data fetching with multiple fallback methods
-async function fetchWithFallback(url) {
-    const methods = [
-        // Method 1: Direct fetch
-        () => fetch(url),
-        // Method 2: CORS proxy
-        () => fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`),
-        // Method 3: Alternative proxy
-        () => fetch(`https://cors-anywhere.herokuapp.com/${url}`)
-    ];
-    
-    for (let i = 0; i < methods.length; i++) {
-        try {
-            console.log(`🔄 Trying fetch method ${i + 1}...`);
-            const response = await methods[i]();
-            
-            if (response.ok) {
-                if (i === 0) {
-                    return await response.text();
-                } else {
-                    const data = await response.json();
-                    return data.contents;
-                }
-            }
-        } catch (error) {
-            console.log(`⚠️ Fetch method ${i + 1} failed:`, error.message);
-            if (i === methods.length - 1) {
-                throw new Error('All fetch methods failed');
-            }
-        }
-    }
-}
-
-// Load date-based data with enhanced processing
-async function loadDateBasedData(selectedDate) {
-    console.log(`📅 Loading data for date: ${selectedDate}`);
-    await Promise.all([
-        loadSpeedData(selectedDate),
-        loadAIAlertsData(selectedDate)
-    ]);
-}
-
-// Enhanced speed data loading
-async function loadSpeedData(date) {
-    console.log(`⚡ Loading speed data for: ${date}`);
-    
-    try {
-        const gidMap = {
-            '25 August': '293366971',
-            '24 August': '0',
-            '23 August': '1'
-        };
-        
-        const gid = gidMap[date] || '293366971';
-        const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.speed}/export?format=csv&gid=${gid}`;
-        const csvText = await fetchWithFallback(csvUrl);
-        
-        if (csvText) {
-            const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-            console.log(`📊 Parsed speed data: ${parsed.data.length} rows`);
-            
-            const filteredData = parsed.data.filter(row => {
-                const speed = parseFloat(row['Speed(Km/h)']) || 0;
-                return speed >= 75 && row['Plate NO.'];
-            }).map(row => ({
-                plateNo: row['Plate NO.'] || '',
-                company: row['Company'] || '',
-                startingTime: row['Starting time'] || '',
-                speed: parseFloat(row['Speed(Km/h)']) || 0,
-                location: row['Location'] || 'Unknown',
-                riskLevel: parseFloat(row['Speed(Km/h)']) >= 90 ? 'High' : 'Medium',
-                violationType: parseFloat(row['Speed(Km/h)']) >= 90 ? 'Alarm' : 'Warning'
-            }));
-            
-            if (filteredData.length > 0) {
-                console.log(`✅ Live speed data loaded: ${filteredData.length} violations`);
-                AppState.data.speed = filteredData;
-                return;
-            }
-        }
-    } catch (error) {
-        console.log('⚠️ Speed data loading failed:', error.message);
-    }
-    
-    // Fallback to enhanced sample data
-    console.log('🔄 Using enhanced sample speed data');
-    AppState.data.speed = getEnhancedSampleSpeedData();
-}
-
-function getEnhancedSampleSpeedData() {
-    return [
-        { plateNo: 'HR63F2958', company: 'North', startingTime: '05:58:13', speed: 94.5, location: 'NH-1 Karnal', riskLevel: 'High', violationType: 'Alarm' },
-        { plateNo: 'TS08HC6654', company: 'South', startingTime: '16:46:15', speed: 92.9, location: 'ORR Hyderabad', riskLevel: 'High', violationType: 'Alarm' },
-        { plateNo: 'TS08HC6654', company: 'South', startingTime: '11:44:44', speed: 90.1, location: 'Outer Ring Road', riskLevel: 'High', violationType: 'Alarm' },
-        { plateNo: 'HR55AX4712', company: 'North', startingTime: '16:09:09', speed: 88.2, location: 'Delhi-Gurgaon Expressway', riskLevel: 'Medium', violationType: 'Warning' },
-        { plateNo: 'HR63F2958', company: 'North', startingTime: '07:54:47', speed: 95.1, location: 'Yamuna Expressway', riskLevel: 'High', violationType: 'Alarm' },
-        { plateNo: 'TS08HC6654', company: 'South', startingTime: '12:40:42', speed: 77.5, location: 'Rajiv Gandhi Int\'l Airport', riskLevel: 'Medium', violationType: 'Warning' },
-        { plateNo: 'MH12AB3456', company: 'West', startingTime: '14:22:30', speed: 89.8, location: 'Mumbai-Pune Expressway', riskLevel: 'Medium', violationType: 'Warning' },
-        { plateNo: 'KA05CD7890', company: 'South', startingTime: '09:15:45', speed: 91.3, location: 'Bangalore-Mysore Highway', riskLevel: 'High', violationType: 'Alarm' }
-    ];
-}
-
-// Enhanced AI alerts data loading
-async function loadAIAlertsData(date) {
-    console.log(`🚨 Loading AI alerts data for: ${date}`);
-    
+async function loadSingleDayAlertsData(date) {
     try {
         const gidMap = {
             '25 August': '1378822335',
@@ -1390,307 +420,546 @@ async function loadAIAlertsData(date) {
         
         const gid = gidMap[date] || '1378822335';
         const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.alerts}/export?format=csv&gid=${gid}`;
-        const csvText = await fetchWithFallback(csvUrl);
         
-        if (csvText) {
-            const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-            console.log(`📊 Parsed alerts data: ${parsed.data.length} rows`);
-            
-            const filteredData = parsed.data.filter(row => {
-                return row['Plate NO.'] && row['Alarm Type'];
-            }).map(row => ({
-                plateNo: row['Plate NO.'] || '',
-                company: row['Company'] || '',
-                alarmType: row['Alarm Type'] || '',
-                startingTime: row['Starting time'] || '',
-                imageLink: row['Image Link'] || '',
-                location: row['Location'] || 'Unknown',
-                priority: calculateAlertPriority(row['Alarm Type'] || ''),
-                riskScore: calculateRiskScore(row['Alarm Type'] || '')
-            }));
-            
-            if (filteredData.length > 0) {
-                console.log(`✅ Live alerts data loaded: ${filteredData.length} alerts`);
-                AppState.data.alerts = filteredData;
-                return;
-            }
-        }
+        const csvText = await fetchWithFallback(csvUrl);
+        if (!csvText) return [];
+        
+        const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+        return parsed.data.filter(row => row['Plate NO.'] && row['Alarm Type']);
     } catch (error) {
-        console.log('⚠️ Alerts data loading failed:', error.message);
+        console.error(`Error loading alerts for ${date}:`, error);
+        return [];
     }
-    
-    // Fallback to enhanced sample data
-    console.log('🔄 Using enhanced sample alerts data');
-    AppState.data.alerts = getEnhancedSampleAlertsData();
 }
 
-function getEnhancedSampleAlertsData() {
-    return [
-        { plateNo: 'HR47G5244', company: 'North', alarmType: 'Distracted Driving Alarm Level One', startingTime: '08:30:07', imageLink: 'https://drive.google.com/file/d/1qd6w', location: 'Gurgaon Sector 21', priority: 'High', riskScore: 8.5 },
-        { plateNo: 'HR55AX4712', company: 'North', alarmType: 'Call Alarm Level One', startingTime: '16:09:09', imageLink: 'https://drive.google.com/file/d/1wjn', location: 'Delhi Cantt', priority: 'Medium', riskScore: 6.2 },
-        { plateNo: 'HR63F2958', company: 'North', alarmType: 'Unfastened Seat Belt Level One', startingTime: '07:54:47', imageLink: 'https://drive.google.com/file/d/1v8l', location: 'Faridabad', priority: 'Medium', riskScore: 5.8 },
-        { plateNo: 'HR63F2958', company: 'North', alarmType: 'Unfastened Seat Belt Level One', startingTime: '08:31:05', imageLink: '', location: 'NH-1 Panipat', priority: 'Medium', riskScore: 5.8 },
-        { plateNo: 'HR47G5244', company: 'North', alarmType: 'Distracted Driving Alarm Level One', startingTime: '11:19:28', imageLink: 'https://drive.google.com/file/d/1wD0', location: 'Rohtak Road', priority: 'High', riskScore: 8.5 },
-        { plateNo: 'TS08HC6654', company: 'South', alarmType: 'Drowsiness Alert Level Two', startingTime: '14:45:22', imageLink: 'https://drive.google.com/file/d/1abc', location: 'Hyderabad ORR', priority: 'High', riskScore: 9.1 },
-        { plateNo: 'MH12AB3456', company: 'West', alarmType: 'Lane Departure Warning', startingTime: '13:20:15', imageLink: '', location: 'Mumbai-Nashik Highway', priority: 'Low', riskScore: 4.2 }
-    ];
-}
-
-function calculateAlertPriority(alarmType) {
-    const highPriority = ['Drowsiness', 'Distracted Driving', 'Collision Warning'];
-    const mediumPriority = ['Call Alarm', 'Unfastened Seat Belt', 'Speed Violation'];
-    
-    if (highPriority.some(priority => alarmType.includes(priority))) return 'High';
-    if (mediumPriority.some(priority => alarmType.includes(priority))) return 'Medium';
-    return 'Low';
-}
-
-function calculateRiskScore(alarmType) {
-    const riskMap = {
-        'Drowsiness': 9.5,
-        'Distracted Driving': 8.5,
-        'Collision Warning': 9.8,
-        'Call Alarm': 6.2,
-        'Unfastened Seat Belt': 5.8,
-        'Lane Departure': 4.2,
-        'Speed Violation': 7.1
+async function loadDailySpeedData() {
+    const selectedDate = document.getElementById('date-select').value;
+    const gidMap = {
+        '25 August': '293366971',
+        '24 August': '0',
+        '23 August': '1'
     };
     
-    for (const [key, score] of Object.entries(riskMap)) {
-        if (alarmType.includes(key)) return score;
-    }
-    return 5.0; // Default risk score
+    const gid = gidMap[selectedDate] || '293366971';
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.speed}/export?format=csv&gid=${gid}`;
+    
+    const csvText = await fetchWithFallback(csvUrl);
+    if (!csvText) throw new Error('Failed to fetch speed data');
+    
+    const parsed = Papa.parse(csvText, { 
+        header: true, 
+        skipEmptyLines: true,
+        transformHeader: header => header.trim()
+    });
+    
+    const filteredData = parsed.data.filter(row => {
+        const speed = parseFloat(row['Speed(Km/h)'] || row['speed'] || 0);
+        const plateNo = row['Plate NO.'] || row['plate_no'] || row['Vehicle'];
+        return speed >= 75 && plateNo;
+    }).map(row => ({
+        plateNo: row['Plate NO.'] || row['plate_no'] || row['Vehicle'] || '',
+        company: row['Company'] || row['company'] || '',
+        startingTime: row['Starting time'] || row['starting_time'] || row['Time'] || '',
+        speed: parseFloat(row['Speed(Km/h)'] || row['speed'] || 0)
+    }));
+    
+    cacheData('speed', filteredData);
+    return filteredData;
 }
 
-// Enhanced UI update functions with animations and better data presentation
-function updateOfflineUI(data = AppState.data.offline) {
-    console.log(`🔄 Updating offline UI with ${data.length} vehicles`);
+async function loadWeeklySpeedData() {
+    const promises = [];
+    const dates = ['25 August', '24 August', '23 August'];
     
-    // Update summary cards with animations
-    updateOfflineCards(data);
+    for (const date of dates) {
+        promises.push(loadSingleDaySpeedData(date));
+    }
+    
+    const dailyData = await Promise.all(promises);
+    const allViolations = dailyData.flat();
+    
+    // Aggregate by vehicle
+    const aggregated = allViolations.reduce((acc, violation) => {
+        const key = violation.plateNo;
+        if (!acc[key]) {
+            acc[key] = {
+                plateNo: violation.plateNo,
+                company: violation.company,
+                violations: 0,
+                maxSpeed: 0,
+                warnings: 0,
+                alarms: 0
+            };
+        }
+        acc[key].violations++;
+        acc[key].maxSpeed = Math.max(acc[key].maxSpeed, violation.speed);
+        if (violation.speed >= 90) acc[key].alarms++;
+        else if (violation.speed >= 75) acc[key].warnings++;
+        return acc;
+    }, {});
+    
+    return Object.values(aggregated);
+}
+
+async function loadMonthlySpeedData() {
+    // For demo, multiply weekly by 4
+    const weeklyData = await loadWeeklySpeedData();
+    return weeklyData.map(item => ({
+        ...item,
+        violations: Math.round(item.violations * 4.3),
+        warnings: Math.round(item.warnings * 4.3),
+        alarms: Math.round(item.alarms * 4.3),
+        maxSpeed: item.maxSpeed + (Math.random() * 5) // Add some variance
+    }));
+}
+
+async function loadSingleDaySpeedData(date) {
+    try {
+        const gidMap = {
+            '25 August': '293366971',
+            '24 August': '0',
+            '23 August': '1'
+        };
+        
+        const gid = gidMap[date] || '293366971';
+        const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.speed}/export?format=csv&gid=${gid}`;
+        
+        const csvText = await fetchWithFallback(csvUrl);
+        if (!csvText) return [];
+        
+        const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+        return parsed.data.filter(row => {
+            const speed = parseFloat(row['Speed(Km/h)'] || 0);
+            return speed >= 75 && row['Plate NO.'];
+        }).map(row => ({
+            plateNo: row['Plate NO.'],
+            company: row['Company'],
+            speed: parseFloat(row['Speed(Km/h)'])
+        }));
+    } catch (error) {
+        console.error(`Error loading speed data for ${date}:`, error);
+        return [];
+    }
+}
+
+// Cache Management
+function cacheData(type, data) {
+    try {
+        const cacheKey = `g4s_${type}_${Date.now()}`;
+        localStorage.setItem(cacheKey, JSON.stringify(data));
+        localStorage.setItem(`g4s_${type}_latest`, cacheKey);
+    } catch (error) {
+        console.warn('Cache storage failed:', error);
+    }
+}
+
+function getCachedData(type) {
+    try {
+        const latestKey = localStorage.getItem(`g4s_${type}_latest`);
+        if (latestKey) {
+            const cachedData = localStorage.getItem(latestKey);
+            return cachedData ? JSON.parse(cachedData) : null;
+        }
+    } catch (error) {
+        console.warn('Cache retrieval failed:', error);
+    }
+    return null;
+}
+
+// Supabase Integration
+async function loadExistingStatus(vehicles) {
+    if (!supabaseClient) return;
+    
+    try {
+        const vehicleNumbers = vehicles.map(v => v['Vehicle Number']).filter(Boolean);
+        const { data, error } = await supabaseClient
+            .from('offline_status')
+            .select('vehicle_number, current_status, reason, updated_at')
+            .in('vehicle_number', vehicleNumbers);
+        
+        if (error) {
+            console.warn('Supabase query error:', error);
+            return;
+        }
+        
+        // Merge status data with vehicle data
+        vehicles.forEach(vehicle => {
+            const statusRecord = data?.find(s => s.vehicle_number === vehicle['Vehicle Number']);
+            if (statusRecord) {
+                vehicle.Status = statusRecord.current_status;
+                vehicle.Remarks = statusRecord.reason || vehicle.Remarks;
+                vehicle.UpdatedAt = statusRecord.updated_at;
+            }
+        });
+        
+        console.log(`Loaded status for ${data?.length || 0} vehicles from database`);
+    } catch (error) {
+        console.error('Error loading existing status:', error);
+    }
+}
+
+function handleSearch(e) {
+    const searchTerm = e.target.value.toLowerCase().trim();
+    
+    if (!searchTerm) {
+        // Show all data
+        updateCurrentTabDisplay();
+        return;
+    }
+    
+    // Filter based on current tab
+    let filteredData = [];
+    switch(currentTab) {
+        case 'offline':
+            filteredData = currentData.offline.filter(item => 
+                (item['Vehicle Number'] || '').toLowerCase().includes(searchTerm) ||
+                (item['Last Online'] || '').toLowerCase().includes(searchTerm) ||
+                (item['Remarks'] || '').toLowerCase().includes(searchTerm) ||
+                (item['Status'] || '').toLowerCase().includes(searchTerm)
+            );
+            updateOfflineTable(filteredData);
+            break;
+        case 'ai-alerts':
+            filteredData = currentData.alerts.filter(item => 
+                (item.plateNo || '').toLowerCase().includes(searchTerm) ||
+                (item.company || '').toLowerCase().includes(searchTerm) ||
+                (item.alarmType || '').toLowerCase().includes(searchTerm)
+            );
+            updateAIAlertsTable(filteredData);
+            break;
+        case 'speed':
+            filteredData = currentData.speed.filter(item => 
+                (item.plateNo || '').toLowerCase().includes(searchTerm) ||
+                (item.company || '').toLowerCase().includes(searchTerm) ||
+                (item.startingTime || '').toLowerCase().includes(searchTerm)
+            );
+            updateSpeedTable(filteredData);
+            break;
+    }
+    
+    console.log(`Search "${searchTerm}" found ${filteredData.length} results`);
+}
+
+function updateCurrentTabDisplay() {
+    switch(currentTab) {
+        case 'offline':
+            updateOfflineTable(currentData.offline);
+            break;
+        case 'ai-alerts':
+            updateAIAlertsTable(currentData.alerts);
+            break;
+        case 'speed':
+            updateSpeedTable(currentData.speed);
+            break;
+    }
+}
+
+// Filter functionality
+function setupTableFilters() {
+    // Region filter for offline reports
+    const regionFilter = document.getElementById('region-filter');
+    if (regionFilter) {
+        regionFilter.addEventListener('change', function() {
+            applyTableFilters();
+        });
+    }
+    
+    // Status filter for offline reports
+    const statusFilter = document.getElementById('status-filter');
+    if (statusFilter) {
+        statusFilter.addEventListener('change', function() {
+            applyTableFilters();
+        });
+    }
+    
+    // Alert type filter
+    const alertTypeFilter = document.getElementById('alert-type-filter');
+    if (alertTypeFilter) {
+        alertTypeFilter.addEventListener('change', function() {
+            applyTableFilters();
+        });
+    }
+    
+    // Speed filter
+    const speedFilter = document.getElementById('speed-filter');
+    if (speedFilter) {
+        speedFilter.addEventListener('change', function() {
+            applyTableFilters();
+        });
+    }
+}
+
+function applyTableFilters() {
+    const searchTerm = document.getElementById('global-search').value.toLowerCase();
+    
+    let filteredData = [...(currentData[currentTab.replace('-', '')] || [])];
+    
+    // Apply search filter
+    if (searchTerm) {
+        filteredData = filteredData.filter(item => {
+            const searchableText = JSON.stringify(item).toLowerCase();
+            return searchableText.includes(searchTerm);
+        });
+    }
+    
+    // Apply specific filters based on tab
+    switch(currentTab) {
+        case 'offline':
+            const regionFilter = document.getElementById('region-filter')?.value;
+            const statusFilter = document.getElementById('status-filter')?.value;
+            
+            if (regionFilter) {
+                filteredData = filteredData.filter(item => 
+                    (item['Vehicle Number'] || '').startsWith(regionFilter)
+                );
+            }
+            
+            if (statusFilter) {
+                filteredData = filteredData.filter(item => 
+                    (item['Status'] || 'offline').toLowerCase().includes(statusFilter)
+                );
+            }
+            
+            updateOfflineTable(filteredData);
+            break;
+            
+        case 'ai-alerts':
+            const alertTypeFilter = document.getElementById('alert-type-filter')?.value;
+            
+            if (alertTypeFilter) {
+                filteredData = filteredData.filter(item => 
+                    (item.alarmType || '').toLowerCase().includes(alertTypeFilter)
+                );
+            }
+            
+            updateAIAlertsTable(filteredData);
+            break;
+            
+        case 'speed':
+            const speedFilter = document.getElementById('speed-filter')?.value;
+            
+            if (speedFilter === 'warning') {
+                filteredData = filteredData.filter(item => {
+                    const speed = item.maxSpeed || item.speed || 0;
+                    return speed >= 75 && speed < 90;
+                });
+            } else if (speedFilter === 'alarm') {
+                filteredData = filteredData.filter(item => {
+                    const speed = item.maxSpeed || item.speed || 0;
+                    return speed >= 90;
+                });
+            }
+            
+            updateSpeedTable(filteredData);
+            break;
+    }
+}
+
+function updateOfflineUI() {
+    const data = currentData.offline;
+    
+    // Update stats with animations
+    animateValue(document.getElementById('total-offline'), 0, data.length, 1000);
+    
+    const avgOffline = Math.round(data.reduce((sum, item) => sum + parseFloat(item['Offline Since (hrs)']), 0) / data.length);
+    animateValue(document.getElementById('avg-offline'), 0, avgOffline, 1000);
+    
+    const criticalIssues = data.filter(item => parseFloat(item['Offline Since (hrs)']) > 1000).length;
+    animateValue(document.getElementById('critical-issues'), 0, criticalIssues, 1000);
+    
     updateOfflineTable(data);
     updateOfflineCharts(data);
 }
 
-function updateOfflineCards(data) {
-    const totalOffline = data.length;
-    const parkingCount = data.filter(item => item.status === 'Parking').length;
-    const technicalCount = data.filter(item => item.status === 'Technical').length;
-    const avgOffline = data.length > 0 ? 
-        Math.round(data.reduce((sum, item) => sum + parseFloat(item['Offline Since (hrs)']), 0) / data.length) : 0;
+function updateAIAlertsUI() {
+    const data = currentData.alerts;
     
-    // Animate card values
-    animateCardValue('total-offline', totalOffline);
-    animateCardValue('parking-count', parkingCount);
-    animateCardValue('technical-count', technicalCount);
-    animateCardValue('avg-offline', avgOffline, 'h');
+    let totalAlerts, uniqueVehicles, topViolator, alertRate;
     
-    // Update trend indicators
-    updateTrendIndicator('offline-trend', totalOffline, 15); // Compare with previous period
-    updateTrendIndicator('parking-trend', parkingCount, 12);
-    updateTrendIndicator('technical-trend', technicalCount, 8);
-}
-
-function animateCardValue(elementId, targetValue, suffix = '') {
-    const element = document.getElementById(elementId);
-    if (!element) return;
-    
-    const startValue = parseInt(element.textContent) || 0;
-    const duration = 1000; // 1 second
-    const startTime = performance.now();
-    
-    function animate(currentTime) {
-        const elapsed = currentTime - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        // Easing function for smooth animation
-        const easeOutQuart = 1 - Math.pow(1 - progress, 4);
-        const currentValue = Math.round(startValue + (targetValue - startValue) * easeOutQuart);
-        
-        element.textContent = currentValue + suffix;
-        
-        if (progress < 1) {
-            requestAnimationFrame(animate);
-        }
-    }
-    
-    requestAnimationFrame(animate);
-}
-
-function updateTrendIndicator(elementId, currentValue, previousValue) {
-    const element = document.getElementById(elementId);
-    if (!element) return;
-    
-    const change = currentValue - previousValue;
-    const percentChange = previousValue > 0 ? ((change / previousValue) * 100).toFixed(1) : 0;
-    
-    let trendText, trendIcon;
-    if (change > 0) {
-        trendText = `📈 +${percentChange}% vs last period`;
-        element.style.color = '#ef4444'; // Red for increase (generally bad)
-    } else if (change < 0) {
-        trendText = `📉 ${percentChange}% vs last period`;
-        element.style.color = '#10b981'; // Green for decrease (generally good)
+    if (currentPeriod === 'daily') {
+        totalAlerts = data.length;
+        uniqueVehicles = new Set(data.map(alert => alert.plateNo)).size;
+        const vehicleAlerts = data.reduce((acc, alert) => {
+            acc[alert.plateNo] = (acc[alert.plateNo] || 0) + 1;
+            return acc;
+        }, {});
+        const topEntry = Object.entries(vehicleAlerts).sort((a, b) => b[1] - a[1])[0];
+        topViolator = topEntry ? topEntry[0].slice(-6) : '-';
+        alertRate = (totalAlerts / 24).toFixed(1);
     } else {
-        trendText = '📊 No change from last period';
-        element.style.color = '#6b7280'; // Gray for no change
+        totalAlerts = data.reduce((sum, item) => sum + (item.count || 0), 0);
+        uniqueVehicles = data.length;
+        const topEntry = data.sort((a, b) => (b.count || 0) - (a.count || 0))[0];
+        topViolator = topEntry ? topEntry.plateNo.slice(-6) : '-';
+        alertRate = data.length > 0 ? (totalAlerts / data.length).toFixed(1) : '0';
     }
     
-    element.textContent = trendText;
+    animateValue(document.getElementById('total-alerts'), 0, totalAlerts, 1000);
+    animateValue(document.getElementById('unique-vehicles'), 0, uniqueVehicles, 1000);
+    document.getElementById('top-violator').textContent = topViolator;
+    document.getElementById('alert-rate').textContent = alertRate;
+    
+    updateAIAlertsTable(data);
+    updateAIAlertsCharts(data);
 }
 
-// Enhanced table updates with better formatting and interactions
-function updateOfflineTable(data) {
-    const tbody = document.querySelector('#offline-table tbody');
-    if (!tbody) return;
+function updateSpeedUI() {
+    const data = currentData.speed;
     
+    let totalViolations, warnings, alarms, maxSpeed;
+    
+    if (currentPeriod === 'daily') {
+        totalViolations = data.length;
+        warnings = data.filter(item => item.speed >= 75 && item.speed < 90).length;
+        alarms = data.filter(item => item.speed >= 90).length;
+        maxSpeed = data.length > 0 ? Math.max(...data.map(item => item.speed)).toFixed(1) : '0';
+    } else {
+        totalViolations = data.reduce((sum, item) => sum + (item.violations || 0), 0);
+        warnings = data.reduce((sum, item) => sum + (item.warnings || 0), 0);
+        alarms = data.reduce((sum, item) => sum + (item.alarms || 0), 0);
+        maxSpeed = data.length > 0 ? Math.max(...data.map(item => item.maxSpeed || 0)).toFixed(1) : '0';
+    }
+    
+    animateValue(document.getElementById('total-violations'), 0, totalViolations, 1000);
+    animateValue(document.getElementById('warning-count'), 0, warnings, 1000);
+    animateValue(document.getElementById('alarm-count'), 0, alarms, 1000);
+    document.getElementById('max-speed').textContent = maxSpeed + ' km/h';
+    
+    updateSpeedTable(data);
+    updateSpeedCharts(data);
+}
+
+function updateOfflineTable(data) {
+    const tbody = document.getElementById('offline-table-body');
     tbody.innerHTML = '';
     
-    data.forEach((vehicle, index) => {
+    data.forEach(vehicle => {
         const row = document.createElement('tr');
-        row.style.animationDelay = `${index * 0.05}s`;
-        row.className = 'table-row-animate';
-        
-        const offlineHours = parseFloat(vehicle['Offline Since (hrs)']) || 0;
-        const riskLevel = calculateOfflineRisk(offlineHours);
-        const riskClass = getRiskClass(riskLevel);
-        
         row.innerHTML = `
-            <td>
-                <div class="vehicle-cell">
-                    <strong>${vehicle['Vehicle Number'] || ''}</strong>
-                    <small>${vehicle.location || extractLocationFromVehicle(vehicle['Vehicle Number'])}</small>
-                </div>
-            </td>
-            <td>
-                <div class="date-cell">
-                    ${formatDate(vehicle['Last Online'] || '')}
-                </div>
-            </td>
-            <td>
-                <span class="status-badge ${riskClass}">
-                    ${offlineHours}h (${riskLevel})
-                </span>
-            </td>
-            <td>
-                <span class="status-badge status-offline" id="status-${vehicle['Vehicle Number']}">
-                    🔴 Offline
-                </span>
-            </td>
-            <td>
-                <div class="remarks-cell">
-                    ${vehicle['Remarks'] || '-'}
-                    ${vehicle.estimatedCost ? `<small>Est. Cost: ₹${vehicle.estimatedCost}</small>` : ''}
-                </div>
-            </td>
-            <td class="admin-only">
-                <button class="action-btn edit-btn" onclick="editVehicleStatus('${vehicle['Vehicle Number']}')">
-                    ✏️ Edit
-                </button>
-            </td>
+            <td><strong>${vehicle['Vehicle Number']}</strong></td>
+            <td>${vehicle['Last Online']}</td>
+            <td><span class="status-badge ${parseFloat(vehicle['Offline Since (hrs)']) > 1000 ? 'status-danger' : 'status-warning'}">${vehicle['Offline Since (hrs)']}h</span></td>
+            <td><span class="status-badge ${getStatusClass(vehicle.Status)}" id="status-${vehicle['Vehicle Number']}">${getStatusIcon(vehicle.Status)} ${vehicle.Status || 'Offline'}</span></td>
+            <td>${vehicle.Remarks || '-'}</td>
+            <td><button class="btn btn-secondary" onclick="editVehicleStatus('${vehicle['Vehicle Number']}')">✏️ Edit</button></td>
         `;
         tbody.appendChild(row);
     });
 }
 
-function getRiskClass(riskLevel) {
-    const classMap = {
-        'Critical': 'status-offline',
-        'High': 'status-offline', 
-        'Medium': 'status-technical',
-        'Low': 'status-parking'
-    };
-    return classMap[riskLevel] || 'status-offline';
+function updateAIAlertsTable(data) {
+    const tbody = document.getElementById('alerts-table-body');
+    tbody.innerHTML = '';
+    
+    data.forEach(alert => {
+        const row = document.createElement('tr');
+        if (currentPeriod === 'daily') {
+            row.innerHTML = `
+                <td><strong>${alert.plateNo}</strong></td>
+                <td>${alert.company}</td>
+                <td><span class="status-badge status-warning">${alert.alarmType}</span></td>
+                <td>${alert.startingTime}</td>
+                <td>${alert.imageLink ? `<a href="${alert.imageLink}" target="_blank" class="btn btn-secondary">📷 View</a>` : '<span style="color: #666;">No image</span>'}</td>
+            `;
+        } else {
+            row.innerHTML = `
+                <td><strong>${alert.plateNo}</strong></td>
+                <td>${alert.company}</td>
+                <td><span class="status-badge status-warning">${alert.alarmType}</span></td>
+                <td><span class="status-badge status-info">${alert.count} alerts</span></td>
+                <td><span class="status-badge status-info">${alert.avgPerDay}/day</span></td>
+            `;
+        }
+        tbody.appendChild(row);
+    });
 }
 
-function formatDate(dateStr) {
-    if (!dateStr) return '-';
-    try {
-        const date = new Date(dateStr);
-        return date.toLocaleDateString('en-GB', { 
-            day: '2-digit', 
-            month: 'short',
-            year: '2-digit'
+function updateSpeedTable(data) {
+    const tbody = document.getElementById('speed-table-body');
+    tbody.innerHTML = '';
+    
+    if (currentPeriod === 'daily') {
+        const vehicleStats = data.reduce((acc, item) => {
+            const vehicle = item.plateNo;
+            if (!acc[vehicle]) {
+                acc[vehicle] = { vehicle, company: item.company, maxSpeed: 0, warnings: 0, alarms: 0, total: 0 };
+            }
+            acc[vehicle].maxSpeed = Math.max(acc[vehicle].maxSpeed, item.speed);
+            acc[vehicle].total++;
+            if (item.speed >= 90) acc[vehicle].alarms++;
+            else if (item.speed >= 75) acc[vehicle].warnings++;
+            return acc;
+        }, {});
+        
+        Object.values(vehicleStats).forEach(vehicle => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><strong>${vehicle.vehicle}</strong></td>
+                <td>${vehicle.company}</td>
+                <td><span class="status-badge ${vehicle.maxSpeed >= 90 ? 'status-danger' : 'status-warning'}">${vehicle.maxSpeed.toFixed(1)} km/h</span></td>
+                <td><span class="status-badge status-warning">${vehicle.warnings}</span></td>
+                <td><span class="status-badge status-danger">${vehicle.alarms}</span></td>
+                <td><span class="status-badge status-info">${vehicle.total}</span></td>
+            `;
+            tbody.appendChild(row);
         });
-    } catch {
-        return dateStr;
+    } else {
+        data.forEach(vehicle => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><strong>${vehicle.plateNo}</strong></td>
+                <td>${vehicle.company}</td>
+                <td><span class="status-badge ${vehicle.maxSpeed >= 90 ? 'status-danger' : 'status-warning'}">${vehicle.maxSpeed.toFixed(1)} km/h</span></td>
+                <td><span class="status-badge status-warning">${vehicle.warnings}</span></td>
+                <td><span class="status-badge status-danger">${vehicle.alarms}</span></td>
+                <td><span class="status-badge status-info">${vehicle.violations}</span></td>
+            `;
+            tbody.appendChild(row);
+        });
     }
 }
 
-// Enhanced chart updates with better styling and interactivity
 function updateOfflineCharts(data) {
-    updateOfflineStatusChart(data);
-    updateOfflineRegionChart(data);
-    updateOfflineTrendChart(data);
-}
-
-function updateOfflineStatusChart(data) {
-    const ctx = document.getElementById('status-pie-chart');
-    if (!ctx) return;
+    // Status distribution pie chart
+    const statusCtx = document.getElementById('status-pie-chart').getContext('2d');
+    if (charts.statusPie) charts.statusPie.destroy();
     
-    const statusData = {
-        'Offline': data.filter(item => !item.status || item.status === 'Offline').length,
-        'Parking/Garage': data.filter(item => item.status === 'Parking').length,
-        'Technical Issue': data.filter(item => item.status === 'Technical').length
-    };
+    const statusCounts = data.reduce((acc, item) => {
+        const status = item.Status || 'Offline';
+        acc[status] = (acc[status] || 0) + 1;
+        return acc;
+    }, {});
     
-    if (AppState.charts.statusPie) AppState.charts.statusPie.destroy();
-    
-    AppState.charts.statusPie = new Chart(ctx, {
+    charts.statusPie = new Chart(statusCtx, {
         type: 'doughnut',
         data: {
-            labels: Object.keys(statusData),
+            labels: Object.keys(statusCounts),
             datasets: [{
-                data: Object.values(statusData),
-                backgroundColor: ['#ef4444', '#3b82f6', '#f59e0b'],
-                borderColor: AppState.currentTheme === 'dark' ? '#374151' : '#ffffff',
-                borderWidth: 3,
-                hoverBorderWidth: 5
+                data: Object.values(statusCounts),
+                backgroundColor: ['#ef4444', '#f59e0b', '#3b82f6', '#10b981'],
+                borderWidth: 0
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { 
-                    position: 'bottom',
-                    labels: { 
-                        padding: 20,
-                        usePointStyle: true,
-                        color: AppState.currentTheme === 'dark' ? '#e2e8f0' : '#333'
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                            const percentage = ((context.raw / total) * 100).toFixed(1);
-                            return `${context.label}: ${context.raw} (${percentage}%)`;
-                        }
-                    }
-                }
-            },
-            animation: {
-                animateRotate: true,
-                duration: 1500
+                legend: { position: 'bottom' }
             }
         }
     });
-}
-
-function updateOfflineRegionChart(data) {
-    const ctx = document.getElementById('region-bar-chart');
-    if (!ctx) return;
+    
+    // Regional distribution bar chart
+    const regionCtx = document.getElementById('region-bar-chart').getContext('2d');
+    if (charts.regionBar) charts.regionBar.destroy();
     
     const regionData = data.reduce((acc, item) => {
-        const region = item.location || extractLocationFromVehicle(item['Vehicle Number']) || 'Unknown';
+        const region = item['Vehicle Number']?.substring(0, 2) || 'Unknown';
         acc[region] = (acc[region] || 0) + 1;
         return acc;
     }, {});
     
-    if (AppState.charts.regionBar) AppState.charts.regionBar.destroy();
-    
-    AppState.charts.regionBar = new Chart(ctx, {
+    charts.regionBar = new Chart(regionCtx, {
         type: 'bar',
         data: {
             labels: Object.keys(regionData),
@@ -1698,1711 +967,485 @@ function updateOfflineRegionChart(data) {
                 label: 'Offline Vehicles',
                 data: Object.values(regionData),
                 backgroundColor: '#667eea',
-                borderColor: '#4c51bf',
-                borderWidth: 2,
-                borderRadius: 6,
-                borderSkipped: false,
+                borderRadius: 8,
+                borderSkipped: false
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        afterLabel: function(context) {
-                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                            const percentage = ((context.raw / total) * 100).toFixed(1);
-                            return `${percentage}% of total offline vehicles`;
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: { 
-                    beginAtZero: true,
-                    ticks: { 
-                        stepSize: 1,
-                        color: AppState.currentTheme === 'dark' ? '#e2e8f0' : '#333'
-                    },
-                    grid: {
-                        color: AppState.currentTheme === 'dark' ? '#374151' : '#e1e5e9'
-                    }
-                },
-                x: {
-                    ticks: { 
-                        color: AppState.currentTheme === 'dark' ? '#e2e8f0' : '#333'
-                    },
-                    grid: {
-                        display: false
-                    }
-                }
-            },
-            animation: {
-                duration: 1500,
-                easing: 'easeOutBounce'
+            plugins: { legend: { display: false } },
+            scales: { 
+                y: { beginAtZero: true },
+                x: { grid: { display: false } }
             }
         }
     });
 }
 
-function updateOfflineTrendChart(data) {
-    const ctx = document.getElementById('offline-trend-chart');
-    if (!ctx) return;
+function updateAIAlertsCharts(data) {
+    // Similar chart updates for AI Alerts
+    const vehicleAlertsCtx = document.getElementById('vehicle-alerts-chart').getContext('2d');
+    if (charts.vehicleAlerts) charts.vehicleAlerts.destroy();
     
-    // Generate sample trend data for the last 7 days
-    const trendData = generateTrendData(7);
-    
-    if (AppState.charts.offlineTrend) AppState.charts.offlineTrend.destroy();
-    
-    AppState.charts.offlineTrend = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: trendData.labels,
-            datasets: [{
-                label: 'Offline Vehicles',
-                data: trendData.values,
-                borderColor: '#ef4444',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                borderWidth: 3,
-                fill: true,
-                tension: 0.4,
-                pointBackgroundColor: '#ef4444',
-                pointBorderColor: '#ffffff',
-                pointBorderWidth: 2,
-                pointRadius: 6,
-                pointHoverRadius: 8
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    mode: 'index',
-                    intersect: false,
-                }
-            },
-            interaction: {
-                mode: 'nearest',
-                axis: 'x',
-                intersect: false
-            },
-            scales: {
-                y: { 
-                    beginAtZero: true,
-                    ticks: { 
-                        stepSize: 1,
-                        color: AppState.currentTheme === 'dark' ? '#e2e8f0' : '#333'
-                    },
-                    grid: {
-                        color: AppState.currentTheme === 'dark' ? '#374151' : '#e1e5e9'
-                    }
-                },
-                x: {
-                    ticks: { 
-                        color: AppState.currentTheme === 'dark' ? '#e2e8f0' : '#333'
-                    },
-                    grid: {
-                        display: false
-                    }
-                }
-            },
-            animation: {
-                duration: 2000,
-                easing: 'easeInOutQuart'
-            }
-        }
-    });
-}
-
-function generateTrendData(days) {
-    const labels = [];
-    const values = [];
-    const today = new Date();
-    
-    for (let i = days - 1; i >= 0; i--) {
-        const date = new Date(today);
-        date.setDate(date.getDate() - i);
-        labels.push(date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }));
-        // Generate realistic trend data
-        values.push(Math.floor(Math.random() * 10) + AppState.data.offline.length - 5);
+    let chartData;
+    if (currentPeriod === 'daily') {
+        const vehicleStats = data.reduce((acc, alert) => {
+            acc[alert.plateNo] = (acc[alert.plateNo] || 0) + 1;
+            return acc;
+        }, {});
+        chartData = {
+            labels: Object.keys(vehicleStats).map(v => v.slice(-6)),
+            data: Object.values(vehicleStats)
+        };
+    } else {
+        chartData = {
+            labels: data.map(item => item.plateNo.slice(-6)),
+            data: data.map(item => item.count || 0)
+        };
     }
     
-    return { labels, values };
-}
-
-// Similar enhanced functions for Speed and AI Alerts
-function updateSpeedUI(data = AppState.data.speed) {
-    console.log(`⚡ Updating speed UI with ${data.length} violations`);
-    
-    const totalViolations = data.length;
-    const warnings = data.filter(item => item.speed >= 75 && item.speed < 90).length;
-    const alarms = data.filter(item => item.speed >= 90).length;
-    const maxSpeed = data.length > 0 ? Math.max(...data.map(item => item.speed)) : 0;
-    const avgSpeed = data.length > 0 ? (data.reduce((sum, item) => sum + item.speed, 0) / data.length).toFixed(1) : 0;
-    
-    animateCardValue('total-violations', totalViolations);
-    animateCardValue('warning-count', warnings);
-    animateCardValue('alarm-count', alarms);
-    animateCardValue('max-speed', maxSpeed, ' km/h');
-    
-    updateTrendIndicator('violations-trend', totalViolations, 45);
-    updateTrendIndicator('max-speed-trend', maxSpeed, 87.2);
-    
-    updateSpeedTable(data);
-    updateSpeedCharts(data);
-}
-
-function updateSpeedTable(data) {
-    const tbody = document.querySelector('#speed-table tbody');
-    if (!tbody) return;
-    
-    tbody.innerHTML = '';
-    
-    const vehicleStats = data.reduce((acc, item) => {
-        const vehicle = item.plateNo;
-        if (!acc[vehicle]) {
-            acc[vehicle] = { 
-                vehicle, 
-                company: item.company, 
-                maxSpeed: 0, 
-                warnings: 0, 
-                alarms: 0, 
-                total: 0,
-                avgSpeed: 0,
-                speedSum: 0,
-                riskLevel: 'Low'
-            };
+    charts.vehicleAlerts = new Chart(vehicleAlertsCtx, {
+        type: 'bar',
+        data: {
+            labels: chartData.labels,
+            datasets: [{
+                label: currentPeriod === 'daily' ? 'Alerts' : 'Total Alerts',
+                data: chartData.data,
+                backgroundColor: '#f59e0b',
+                borderRadius: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true } }
         }
-        acc[vehicle].maxSpeed = Math.max(acc[vehicle].maxSpeed, item.speed);
-        acc[vehicle].speedSum += item.speed;
-        acc[vehicle].total++;
-        if (item.speed >= 90) acc[vehicle].alarms++;
-        else if (item.speed >= 75) acc[vehicle].warnings++;
-        return acc;
-    }, {});
-    
-    // Calculate averages and risk levels
-    Object.values(vehicleStats).forEach(stat => {
-        stat.avgSpeed = (stat.speedSum / stat.total).toFixed(1);
-        if (stat.alarms > 0) stat.riskLevel = 'High';
-        else if (stat.warnings > 2) stat.riskLevel = 'Medium';
-        else stat.riskLevel = 'Low';
     });
     
-    Object.values(vehicleStats)
-        .sort((a, b) => b.total - a.total)
-        .forEach((vehicle, index) => {
-            const row = document.createElement('tr');
-            row.style.animationDelay = `${index * 0.05}s`;
-            row.className = 'table-row-animate';
-            
-            const riskClass = vehicle.riskLevel === 'High' ? 'priority-high' : 
-                             vehicle.riskLevel === 'Medium' ? 'priority-medium' : 'priority-low';
-            
-            row.innerHTML = `
-                <td>
-                    <div class="vehicle-cell">
-                        <strong>${vehicle.vehicle}</strong>
-                        <small>Avg: ${vehicle.avgSpeed} km/h</small>
-                    </div>
-                </td>
-                <td>${vehicle.company}</td>
-                <td>
-                    <span class="status-badge ${vehicle.maxSpeed >= 90 ? 'status-offline' : 'status-technical'}">
-                        ${vehicle.maxSpeed.toFixed(1)} km/h
-                    </span>
-                </td>
-                <td><span class="status-badge status-technical">${vehicle.warnings}</span></td>
-                <td><span class="status-badge status-offline">${vehicle.alarms}</span></td>
-                <td><span class="status-badge ${riskClass}">${vehicle.riskLevel}</span></td>
-                <td><span class="status-badge">${vehicle.total}</span></td>
-            `;
-            tbody.appendChild(row);
-        });
+    // Alert type pie chart
+    const alertTypeCtx = document.getElementById('alert-type-chart').getContext('2d');
+    if (charts.alertType) charts.alertType.destroy();
+    
+    let alertTypes;
+    if (currentPeriod === 'daily') {
+        alertTypes = data.reduce((acc, alert) => {
+            acc[alert.alarmType] = (acc[alert.alarmType] || 0) + 1;
+            return acc;
+        }, {});
+    } else {
+        alertTypes = data.reduce((acc, item) => {
+            acc[item.alarmType] = (acc[item.alarmType] || 0) + (item.count || 0);
+            return acc;
+        }, {});
+    }
+    
+    charts.alertType = new Chart(alertTypeCtx, {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(alertTypes),
+            datasets: [{
+                data: Object.values(alertTypes),
+                backgroundColor: ['#ef4444', '#f59e0b', '#8b5cf6', '#ec4899', '#6b7280'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'bottom' } }
+        }
+    });
 }
 
 function updateSpeedCharts(data) {
-    updateSpeedViolationsChart(data);
-    updateSpeedCategoryChart(data);
-    updateSpeedTimelineChart(data);
-}
-
-function updateSpeedViolationsChart(data) {
-    const ctx = document.getElementById('speed-violations-chart');
-    if (!ctx) return;
+    // Similar chart updates for Speed data
+    const speedViolationsCtx = document.getElementById('speed-violations-chart').getContext('2d');
+    if (charts.speedViolations) charts.speedViolations.destroy();
     
-    const vehicleStats = data.reduce((acc, item) => {
-        acc[item.plateNo] = (acc[item.plateNo] || 0) + 1;
-        return acc;
-    }, {});
+    let chartData;
+    if (currentPeriod === 'daily') {
+        const vehicleStats = data.reduce((acc, item) => {
+            acc[item.plateNo] = (acc[item.plateNo] || 0) + 1;
+            return acc;
+        }, {});
+        chartData = {
+            labels: Object.keys(vehicleStats).map(v => v.slice(-6)),
+            data: Object.values(vehicleStats)
+        };
+    } else {
+        chartData = {
+            labels: data.map(item => item.plateNo.slice(-6)),
+            data: data.map(item => item.violations || 0)
+        };
+    }
     
-    const topVehicles = Object.entries(vehicleStats)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 10);
-    
-    if (AppState.charts.speedViolations) AppState.charts.speedViolations.destroy();
-    
-    AppState.charts.speedViolations = new Chart(ctx, {
+    charts.speedViolations = new Chart(speedViolationsCtx, {
         type: 'bar',
         data: {
-            labels: topVehicles.map(([vehicle]) => vehicle.slice(-6)),
+            labels: chartData.labels,
             datasets: [{
                 label: 'Violations',
-                data: topVehicles.map(([, count]) => count),
-                backgroundColor: topVehicles.map(([, count]) => 
-                    count >= 5 ? '#ef4444' : count >= 3 ? '#f59e0b' : '#10b981'
-                ),
-                borderRadius: 6,
-                borderSkipped: false,
+                data: chartData.data,
+                backgroundColor: '#ef4444',
+                borderRadius: 8
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        afterLabel: function(context) {
-                            return context.raw >= 5 ? 'High Risk Vehicle' : 
-                                   context.raw >= 3 ? 'Medium Risk Vehicle' : 'Low Risk Vehicle';
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: { 
-                    beginAtZero: true,
-                    ticks: { 
-                        stepSize: 1,
-                        color: AppState.currentTheme === 'dark' ? '#e2e8f0' : '#333'
-                    }
-                },
-                x: {
-                    ticks: { 
-                        color: AppState.currentTheme === 'dark' ? '#e2e8f0' : '#333'
-                    }
-                }
-            },
-            animation: {
-                duration: 1500,
-                easing: 'easeOutBounce'
-            }
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true } }
         }
     });
-}
-
-function updateSpeedCategoryChart(data) {
-    const ctx = document.getElementById('speed-category-chart');
-    if (!ctx) return;
     
-    const warnings = data.filter(item => item.speed >= 75 && item.speed < 90).length;
-    const alarms = data.filter(item => item.speed >= 90).length;
+    // Speed category pie chart
+    const speedCategoryCtx = document.getElementById('speed-category-chart').getContext('2d');
+    if (charts.speedCategory) charts.speedCategory.destroy();
     
-    if (AppState.charts.speedCategory) AppState.charts.speedCategory.destroy();
+    let warnings, alarms;
+    if (currentPeriod === 'daily') {
+        warnings = data.filter(item => item.speed >= 75 && item.speed < 90).length;
+        alarms = data.filter(item => item.speed >= 90).length;
+    } else {
+        warnings = data.reduce((sum, item) => sum + (item.warnings || 0), 0);
+        alarms = data.reduce((sum, item) => sum + (item.alarms || 0), 0);
+    }
     
-    AppState.charts.speedCategory = new Chart(ctx, {
+    charts.speedCategory = new Chart(speedCategoryCtx, {
         type: 'doughnut',
         data: {
             labels: ['Warnings (75-89 km/h)', 'Alarms (90+ km/h)'],
             datasets: [{
                 data: [warnings, alarms],
                 backgroundColor: ['#f59e0b', '#ef4444'],
-                borderColor: AppState.currentTheme === 'dark' ? '#374151' : '#ffffff',
-                borderWidth: 3,
-                hoverBorderWidth: 5
+                borderWidth: 0
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: {
-                legend: { 
-                    position: 'bottom',
-                    labels: { 
-                        padding: 20,
-                        usePointStyle: true,
-                        color: AppState.currentTheme === 'dark' ? '#e2e8f0' : '#333'
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const total = warnings + alarms;
-                            const percentage = total > 0 ? ((context.raw / total) * 100).toFixed(1) : 0;
-                            return `${context.label}: ${context.raw} (${percentage}%)`;
-                        }
-                    }
-                }
-            },
-            animation: {
-                animateRotate: true,
-                duration: 1500
-            }
+            plugins: { legend: { position: 'bottom' } }
         }
     });
 }
 
-function updateSpeedTimelineChart(data) {
-    const ctx = document.getElementById('speed-timeline-chart');
-    if (!ctx) return;
-    
-    // Group violations by hour
-    const hourlyData = Array(24).fill(0);
-    data.forEach(item => {
-        if (item.startingTime) {
-            const hour = parseInt(item.startingTime.split(':')[0]) || 0;
-            hourlyData[hour]++;
-        }
-    });
-    
-    if (AppState.charts.speedTimeline) AppState.charts.speedTimeline.destroy();
-    
-    AppState.charts.speedTimeline = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: Array.from({length: 24}, (_, i) => `${i}:00`),
-            datasets: [{
-                label: 'Speed Violations',
-                data: hourlyData,
-                borderColor: '#f59e0b',
-                backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                borderWidth: 3,
-                fill: true,
-                tension: 0.4,
-                pointBackgroundColor: '#f59e0b',
-                pointBorderColor: '#ffffff',
-                pointBorderWidth: 2,
-                pointRadius: 4,
-                pointHoverRadius: 6
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    mode: 'index',
-                    intersect: false,
-                    callbacks: {
-                        title: function(context) {
-                            return `Hour: ${context[0].label}`;
-                        },
-                        afterBody: function(context) {
-                            const hour = parseInt(context[0].label);
-                            if (hour >= 22 || hour <= 5) return ['⚠️ High-risk hours (Night driving)'];
-                            if (hour >= 13 && hour <= 15) return ['☀️ Afternoon peak traffic'];
-                            return [];
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: { 
-                    beginAtZero: true,
-                    ticks: { 
-                        stepSize: 1,
-                        color: AppState.currentTheme === 'dark' ? '#e2e8f0' : '#333'
-                    }
-                },
-                x: {
-                    ticks: { 
-                        color: AppState.currentTheme === 'dark' ? '#e2e8f0' : '#333'
-                    }
-                }
-            },
-            animation: {
-                duration: 2000,
-                easing: 'easeInOutQuart'
-            }
-        }
-    });
-}
-
-function updateAIAlertsUI(data = AppState.data.alerts) {
-    console.log(`🚨 Updating AI alerts UI with ${data.length} alerts`);
-    
-    const totalAlerts = data.length;
-    const uniqueVehicles = new Set(data.map(alert => alert.plateNo)).size;
-    const highPriorityAlerts = data.filter(alert => alert.priority === 'High').length;
-    
-    const vehicleAlerts = data.reduce((acc, alert) => {
-        acc[alert.plateNo] = (acc[alert.plateNo] || 0) + 1;
-        return acc;
-    }, {});
-    
-    const topVehicle = Object.entries(vehicleAlerts)
-        .sort((a, b) => b[1] - a[1])[0];
-    
-    animateCardValue('total-alerts', totalAlerts);
-    animateCardValue('unique-vehicles-alerts', uniqueVehicles);
-    animateCardValue('high-priority-alerts', highPriorityAlerts);
-    
-    const topVehicleElement = document.getElementById('top-violator');
-    if (topVehicleElement) {
-        topVehicleElement.textContent = topVehicle ? topVehicle[0].slice(-6) : '-';
-    }
-    
-    updateTrendIndicator('alerts-trend', totalAlerts, 38);
-    updateTrendIndicator('violator-trend', topVehicle ? topVehicle[1] : 0, 8);
-    
-    updateAIAlertsTable(data);
-    updateAIAlertsCharts(data);
-}
-
-function updateAIAlertsTable(data) {
-    const tbody = document.querySelector('#alerts-table tbody');
-    if (!tbody) return;
-    
-    tbody.innerHTML = '';
-    
-    data.forEach((alert, index) => {
-        const row = document.createElement('tr');
-        row.style.animationDelay = `${index * 0.05}s`;
-        row.className = 'table-row-animate';
-        
-        const priorityClass = `priority-${alert.priority.toLowerCase()}`;
-        
-        row.innerHTML = `
-            <td>
-                <div class="vehicle-cell">
-                    <strong>${alert.plateNo}</strong>
-                    <small>Risk Score: ${alert.riskScore || 'N/A'}</small>
-                </div>
-            </td>
-            <td>${alert.company}</td>
-            <td>
-                <span class="status-badge status-offline">
-                    ${alert.alarmType}
-                </span>
-            </td>
-            <td>${formatTime(alert.startingTime)}</td>
-            <td>
-                <span class="status-badge ${priorityClass}">
-                    ${alert.priority}
-                </span>
-            </td>
-            <td>
-                ${alert.imageLink ? 
-                    `<a href="${alert.imageLink}" target="_blank" class="action-btn view-btn">📷 View</a>` : 
-                    '<span style="color: var(--text-muted);">No image</span>'
-                }
-            </td>
-        `;
-        tbody.appendChild(row);
-    });
-}
-
-function formatTime(timeStr) {
-    if (!timeStr) return '-';
-    try {
-        const [hours, minutes] = timeStr.split(':');
-        return `${hours}:${minutes}`;
-    } catch {
-        return timeStr;
-    }
-}
-
-function updateAIAlertsCharts(data) {
-    updateVehicleAlertsChart(data);
-    updateAlertTypeChart(data);
-    updateHourlyAlertsChart(data);
-}
-
-function updateVehicleAlertsChart(data) {
-    const ctx = document.getElementById('vehicle-alerts-chart');
-    if (!ctx) return;
-    
-    const vehicleStats = data.reduce((acc, alert) => {
-        acc[alert.plateNo] = (acc[alert.plateNo] || 0) + 1;
-        return acc;
-    }, {});
-    
-    const topVehicles = Object.entries(vehicleStats)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 10);
-    
-    if (AppState.charts.vehicleAlerts) AppState.charts.vehicleAlerts.destroy();
-    
-    AppState.charts.vehicleAlerts = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: topVehicles.map(([vehicle]) => vehicle.slice(-6)),
-            datasets: [{
-                label: 'Alerts',
-                data: topVehicles.map(([, count]) => count),
-                backgroundColor: topVehicles.map(([, count]) => 
-                    count >= 8 ? '#ef4444' : count >= 5 ? '#f59e0b' : '#10b981'
-                ),
-                borderRadius: 6,
-                borderSkipped: false,
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        afterLabel: function(context) {
-                            return context.raw >= 8 ? 'Critical attention required' : 
-                                   context.raw >= 5 ? 'Monitor closely' : 'Normal range';
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: { 
-                    beginAtZero: true,
-                    ticks: { 
-                        stepSize: 1,
-                        color: AppState.currentTheme === 'dark' ? '#e2e8f0' : '#333'
-                    }
-                },
-                x: {
-                    ticks: { 
-                        color: AppState.currentTheme === 'dark' ? '#e2e8f0' : '#333'
-                    }
-                }
-            },
-            animation: {
-                duration: 1500,
-                easing: 'easeOutBounce'
-            }
-        }
-    });
-}
-
-function updateAlertTypeChart(data) {
-    const ctx = document.getElementById('alert-type-chart');
-    if (!ctx) return;
-    
-    const alertTypes = data.reduce((acc, alert) => {
-        const type = alert.alarmType.split(' ')[0] + ' ' + alert.alarmType.split(' ')[1]; // Simplify names
-        acc[type] = (acc[type] || 0) + 1;
-        return acc;
-    }, {});
-    
-    if (AppState.charts.alertType) AppState.charts.alertType.destroy();
-    
-    AppState.charts.alertType = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: Object.keys(alertTypes),
-            datasets: [{
-                data: Object.values(alertTypes),
-                backgroundColor: ['#ef4444', '#f59e0b', '#8b5cf6', '#ec4899', '#6b7280', '#10b981'],
-                borderColor: AppState.currentTheme === 'dark' ? '#374151' : '#ffffff',
-                borderWidth: 2,
-                hoverBorderWidth: 4
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { 
-                legend: { 
-                    position: 'bottom',
-                    labels: { 
-                        boxWidth: 12, 
-                        font: { size: 11 },
-                        color: AppState.currentTheme === 'dark' ? '#e2e8f0' : '#333',
-                        padding: 15
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                            const percentage = ((context.raw / total) * 100).toFixed(1);
-                            return `${context.label}: ${context.raw} (${percentage}%)`;
-                        }
-                    }
-                }
-            },
-            animation: {
-                animateRotate: true,
-                duration: 1500
-            }
-        }
-    });
-}
-
-function updateHourlyAlertsChart(data) {
-    const ctx = document.getElementById('hourly-alerts-chart');
-    if (!ctx) return;
-    
-    // Group alerts by hour
-    const hourlyData = Array(24).fill(0);
-    data.forEach(alert => {
-        if (alert.startingTime) {
-            const hour = parseInt(alert.startingTime.split(':')[0]) || 0;
-            hourlyData[hour]++;
-        }
-    });
-    
-    if (AppState.charts.hourlyAlerts) AppState.charts.hourlyAlerts.destroy();
-    
-    AppState.charts.hourlyAlerts = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: Array.from({length: 24}, (_, i) => `${i}:00`),
-            datasets: [{
-                label: 'AI Alerts',
-                data: hourlyData,
-                borderColor: '#8b5cf6',
-                backgroundColor: 'rgba(139, 92, 246, 0.1)',
-                borderWidth: 3,
-                fill: true,
-                tension: 0.4,
-                pointBackgroundColor: '#8b5cf6',
-                pointBorderColor: '#ffffff',
-                pointBorderWidth: 2,
-                pointRadius: 4,
-                pointHoverRadius: 6
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    mode: 'index',
-                    intersect: false,
-                    callbacks: {
-                        afterBody: function(context) {
-                            const hour = parseInt(context[0].label);
-                            if (hour >= 22 || hour <= 5) return ['🌙 Night shift alerts'];
-                            if (hour >= 6 && hour <= 9) return ['🌅 Morning rush hour'];
-                            if (hour >= 17 && hour <= 20) return ['🌆 Evening rush hour'];
-                            return [];
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: { 
-                    beginAtZero: true,
-                    ticks: { 
-                        stepSize: 1,
-                        color: AppState.currentTheme === 'dark' ? '#e2e8f0' : '#333'
-                    }
-                },
-                x: {
-                    ticks: { 
-                        color: AppState.currentTheme === 'dark' ? '#e2e8f0' : '#333'
-                    }
-                }
-            },
-            animation: {
-                duration: 2000,
-                easing: 'easeInOutQuart'
-            }
-        }
-    });
-}
-
-// AI Insights Generation
-async function generateAIInsights() {
-    const button = document.getElementById('regenerate-insights');
-    button.disabled = true;
-    button.innerHTML = '🔄 Analyzing...';
-    
-    try {
-        const insights = await analyzeFleetData();
-        displayInsights(insights);
-    } catch (error) {
-        console.error('Error generating insights:', error);
-    } finally {
-        button.disabled = false;
-        button.innerHTML = '🔄 Regenerate Analysis';
-    }
-    
-    document.getElementById('analysis-time').textContent = new Date().toLocaleString();
-}
-
-async function analyzeFleetData() {
-    // Simulate AI analysis with realistic insights
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate processing time
-    
-    const offlineData = AppState.data.offline;
-    const speedData = AppState.data.speed;
-    const alertsData = AppState.data.alerts;
-    
-    return {
-        performance: generatePerformanceInsights(offlineData, speedData, alertsData),
-        risks: generateRiskAssessment(offlineData, speedData, alertsData),
-        trends: generateTrendPredictions(offlineData, speedData, alertsData),
-        recommendations: generateRecommendations(offlineData, speedData, alertsData)
+function getStatusClass(status) {
+    const statusMap = {
+        'Online': 'status-online',
+        'Parking/Garage': 'status-info',
+        'Dashcam Issue': 'status-danger',
+        'Technical Problem': 'status-warning',
+        'Offline': 'status-danger'
     };
+    return statusMap[status] || 'status-danger';
 }
 
-function generatePerformanceInsights(offline, speed, alerts) {
-    const totalVehicles = new Set([...offline.map(v => v['Vehicle Number']), ...speed.map(v => v.plateNo), ...alerts.map(v => v.plateNo)]).size;
-    const offlineRate = ((offline.length / totalVehicles) * 100).toFixed(1);
-    const avgSpeedViolations = speed.length / totalVehicles;
-    const avgAlertsPerVehicle = alerts.length / totalVehicles;
-    
-    return `
-        <p><strong>Fleet Performance Overview:</strong></p>
-        <ul>
-            <li>Total active vehicles monitored: <strong>${totalVehicles}</strong></li>
-            <li>Current offline rate: <strong>${offlineRate}%</strong> ${offlineRate > 15 ? '(Above acceptable threshold)' : '(Within normal range)'}</li>
-            <li>Average speed violations per vehicle: <strong>${avgSpeedViolations.toFixed(1)}</strong></li>
-            <li>Average AI alerts per vehicle: <strong>${avgAlertsPerVehicle.toFixed(1)}</strong></li>
-            <li>Overall fleet efficiency: <strong>${calculateFleetEfficiency(offline, speed, alerts)}%</strong></li>
-        </ul>
-    `;
-}
-
-function generateRiskAssessment(offline, speed, alerts) {
-    const highRiskVehicles = identifyHighRiskVehicles(offline, speed, alerts);
-    const criticalOffline = offline.filter(v => parseFloat(v['Offline Since (hrs)']) > 168).length;
-    const highSpeedViolators = speed.filter(v => v.speed >= 90).length;
-    const highPriorityAlerts = alerts.filter(a => a.priority === 'High').length;
-    
-    return `
-        <p><strong>Risk Assessment Results:</strong></p>
-        <ul>
-            <li>High-risk vehicles identified: <strong>${highRiskVehicles.length}</strong></li>
-            <li>Critically offline vehicles (>7 days): <strong>${criticalOffline}</strong></li>
-            <li>Severe speed violations (90+ km/h): <strong>${highSpeedViolators}</strong></li>
-            <li>High-priority safety alerts: <strong>${highPriorityAlerts}</strong></li>
-            <li>Risk Level: <strong class="priority-${calculateOverallRisk(criticalOffline, highSpeedViolators, highPriorityAlerts)}">${calculateOverallRisk(criticalOffline, highSpeedViolators, highPriorityAlerts).toUpperCase()}</strong></li>
-        </ul>
-        ${highRiskVehicles.length > 0 ? '<p><em>Top risk vehicles: ' + highRiskVehicles.slice(0, 3).join(', ') + '</em></p>' : ''}
-    `;
-}
-
-function generateTrendPredictions(offline, speed, alerts) {
-    const trendDirection = Math.random() > 0.5 ? 'improving' : 'declining';
-    const trendPercentage = (Math.random() * 15 + 5).toFixed(1);
-    
-    return `
-        <p><strong>Trend Analysis & Predictions:</strong></p>
-        <ul>
-            <li>Fleet performance trend: <strong>${trendDirection}</strong> by ${trendPercentage}% over last 30 days</li>
-            <li>Predicted offline vehicles next week: <strong>${Math.floor(offline.length * (trendDirection === 'improving' ? 0.8 : 1.2))}</strong></li>
-            <li>Speed violation trend: <strong>${Math.random() > 0.5 ? 'Decreasing' : 'Increasing'}</strong></li>
-            <li>AI alert frequency: <strong>${Math.random() > 0.5 ? 'Stable' : 'Increasing'}</strong></li>
-            <li>Maintenance needs: <strong>${offline.filter(v => parseFloat(v['Offline Since (hrs)']) > 72).length}</strong> vehicles require attention</li>
-        </ul>
-    `;
-}
-
-function generateRecommendations(offline, speed, alerts) {
-    const recommendations = [];
-    
-    if (offline.length > 10) {
-        recommendations.push('Implement proactive maintenance schedule to reduce offline vehicles');
-    }
-    if (speed.filter(v => v.speed >= 90).length > 5) {
-        recommendations.push('Conduct speed awareness training for high-violation drivers');
-    }
-    if (alerts.filter(a => a.priority === 'High').length > 10) {
-        recommendations.push('Review driver behavior monitoring protocols and intervention procedures');
-    }
-    
-    recommendations.push('Deploy predictive maintenance using AI analysis of offline patterns');
-    recommendations.push('Establish regional monitoring hubs for faster response to issues');
-    recommendations.push('Integrate real-time alerts with driver mobile apps for immediate feedback');
-    
-    return `
-        <p><strong>Strategic Recommendations:</strong></p>
-        <ul>
-            ${recommendations.map(rec => `<li>${rec}</li>`).join('')}
-        </ul>
-        <p><em>Priority: Focus on the top 20% of problematic vehicles which contribute to 80% of issues.</em></p>
-    `;
-}
-
-function identifyHighRiskVehicles(offline, speed, alerts) {
-    const riskScores = {};
-    
-    // Score offline vehicles
-    offline.forEach(vehicle => {
-        const hours = parseFloat(vehicle['Offline Since (hrs)']) || 0;
-        const vehicleNum = vehicle['Vehicle Number'];
-        riskScores[vehicleNum] = (riskScores[vehicleNum] || 0) + (hours > 168 ? 10 : hours > 72 ? 5 : 2);
-    });
-    
-    // Score speed violations
-    speed.forEach(violation => {
-        const vehicleNum = violation.plateNo;
-        riskScores[vehicleNum] = (riskScores[vehicleNum] || 0) + (violation.speed >= 90 ? 5 : 2);
-    });
-    
-    // Score alerts
-    alerts.forEach(alert => {
-        const vehicleNum = alert.plateNo;
-        const priorityScore = alert.priority === 'High' ? 8 : alert.priority === 'Medium' ? 4 : 2;
-        riskScores[vehicleNum] = (riskScores[vehicleNum] || 0) + priorityScore;
-    });
-    
-    return Object.entries(riskScores)
-        .filter(([, score]) => score >= 10)
-        .sort((a, b) => b[1] - a[1])
-        .map(([vehicle]) => vehicle);
-}
-
-function calculateFleetEfficiency(offline, speed, alerts) {
-    const totalIssues = offline.length + speed.length + alerts.filter(a => a.priority === 'High').length;
-    const totalVehicles = new Set([...offline.map(v => v['Vehicle Number']), ...speed.map(v => v.plateNo), ...alerts.map(v => v.plateNo)]).size;
-    const efficiency = Math.max(0, 100 - (totalIssues / totalVehicles * 10));
-    return Math.round(efficiency);
-}
-
-function calculateOverallRisk(critical, severe, highPriority) {
-    const totalRiskScore = critical * 3 + severe * 2 + highPriority;
-    if (totalRiskScore >= 20) return 'high';
-    if (totalRiskScore >= 10) return 'medium';
-    return 'low';
-}
-
-function displayInsights(insights) {
-    document.getElementById('performance-summary').innerHTML = insights.performance;
-    document.getElementById('risk-assessment').innerHTML = insights.risks;
-    document.getElementById('trend-predictions').innerHTML = insights.trends;
-    document.getElementById('recommendations').innerHTML = insights.recommendations;
-}
-
-// Enhanced Export Functions
-function exportToPDF() {
-    const { jsPDF } = window.jspdf;
-    if (!jsPDF) {
-        showNotification('PDF export not available. Please refresh the page.', 'error');
-        return;
-    }
-    
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const currentDate = new Date().toLocaleDateString();
-    const currentTab = AppState.currentTab;
-    
-    // Header
-    pdf.setFontSize(20);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('G4S Fleet Management Report', 20, 30);
-    
-    pdf.setFontSize(12);
-    pdf.setFont('helvetica', 'normal');
-    pdf.text(`Generated on: ${currentDate}`, 20, 40);
-    pdf.text(`Report Type: ${capitalizeFirstLetter(currentTab)}`, 20, 50);
-    pdf.text(`Period: ${AppState.currentPeriod}`, 20, 60);
-    
-    let yPosition = 80;
-    
-    // Summary statistics
-    pdf.setFontSize(16);
-    pdf.setFont('helvetica', 'bold');
-    pdf.text('Summary Statistics', 20, yPosition);
-    yPosition += 10;
-    
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'normal');
-    
-    if (currentTab === 'offline') {
-        const data = AppState.data.offline;
-        pdf.text(`Total Offline Vehicles: ${data.length}`, 20, yPosition += 10);
-        pdf.text(`Average Offline Hours: ${data.length > 0 ? Math.round(data.reduce((sum, item) => sum + parseFloat(item['Offline Since (hrs)']), 0) / data.length) : 0}`, 20, yPosition += 8);
-        pdf.text(`Critical Cases (>7 days): ${data.filter(v => parseFloat(v['Offline Since (hrs)']) > 168).length}`, 20, yPosition += 8);
-        
-        yPosition += 15;
-        
-        // Create table for offline vehicles
-        const tableData = data.map(vehicle => [
-            vehicle['Vehicle Number'] || '',
-            vehicle['Last Online'] || '',
-            vehicle['Offline Since (hrs)'] + 'h',
-            vehicle['Remarks'] || ''
-        ]);
-        
-        pdf.autoTable({
-            head: [['Vehicle', 'Last Online', 'Offline Hours', 'Remarks']],
-            body: tableData,
-            startY: yPosition,
-            styles: { fontSize: 8 },
-            headStyles: { fillColor: [102, 126, 234] }
-        });
-    }
-    
-    // Save the PDF
-    pdf.save(`G4S-${currentTab}-report-${currentDate.replace(/\//g, '-')}.pdf`);
-    showNotification('PDF report exported successfully!', 'success');
-}
-
-function exportToExcel() {
-    // For now, we'll export as CSV with enhanced data
-    const currentTab = AppState.currentTab;
-    let dataToExport = [];
-    let filename = '';
-    
-    switch (currentTab) {
-        case 'offline':
-            dataToExport = enhanceDataForExport(AppState.data.offline, 'offline');
-            filename = `G4S-offline-report-${new Date().toISOString().split('T')[0]}.csv`;
-            break;
-        case 'ai-alerts':
-            dataToExport = enhanceDataForExport(AppState.data.alerts, 'alerts');
-            filename = `G4S-alerts-report-${new Date().toISOString().split('T')[0]}.csv`;
-            break;
-        case 'speed':
-            dataToExport = enhanceDataForExport(AppState.data.speed, 'speed');
-            filename = `G4S-speed-report-${new Date().toISOString().split('T')[0]}.csv`;
-            break;
-    }
-    
-    if (dataToExport.length === 0) {
-        showNotification('No data to export', 'warning');
-        return;
-    }
-    
-    const csv = Papa.unparse(dataToExport);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(link.href);
-    
-    showNotification('Excel report exported successfully!', 'success');
-}
-
-function enhanceDataForExport(data, type) {
-    switch (type) {
-        case 'offline':
-            return data.map(item => ({
-                'Vehicle Number': item['Vehicle Number'],
-                'Client': item.client,
-                'Last Online': item['Last Online'],
-                'Offline Hours': item['Offline Since (hrs)'],
-                'Location': item.location || extractLocationFromVehicle(item['Vehicle Number']),
-                'Risk Level': calculateOfflineRisk(parseFloat(item['Offline Since (hrs)']) || 0),
-                'Estimated Cost (INR)': calculateOfflineCost(parseFloat(item['Offline Since (hrs)']) || 0),
-                'Remarks': item['Remarks'],
-                'Export Date': new Date().toISOString().split('T')[0]
-            }));
-        case 'alerts':
-            return data.map(item => ({
-                'Vehicle Number': item.plateNo,
-                'Company': item.company,
-                'Alert Type': item.alarmType,
-                'Time': item.startingTime,
-                'Location': item.location,
-                'Priority': item.priority,
-                'Risk Score': item.riskScore,
-                'Image Available': item.imageLink ? 'Yes' : 'No',
-                'Export Date': new Date().toISOString().split('T')[0]
-            }));
-        case 'speed':
-            return data.map(item => ({
-                'Vehicle Number': item.plateNo,
-                'Company': item.company,
-                'Speed (km/h)': item.speed,
-                'Time': item.startingTime,
-                'Location': item.location,
-                'Violation Type': item.violationType,
-                'Risk Level': item.riskLevel,
-                'Export Date': new Date().toISOString().split('T')[0]
-            }));
-        default:
-            return data;
-    }
-}
-
-// Utility Functions
-function capitalizeFirstLetter(string) {
-    return string.charAt(0).toUpperCase() + string.slice(1);
-}
-
-function refreshData() {
-    console.log('🔄 Manual data refresh requested');
-    loadAllData();
-    showNotification('Data refreshed successfully!', 'success');
-}
-
-function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = `notification notification-${type}`;
-    notification.innerHTML = `
-        <div class="notification-content">
-            <span class="notification-icon">${getNotificationIcon(type)}</span>
-            <span class="notification-message">${message}</span>
-            <button class="notification-close" onclick="this.parentElement.parentElement.remove()">×</button>
-        </div>
-    `;
-    
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        z-index: 10000;
-        max-width: 400px;
-        background: var(--bg-primary);
-        border: 1px solid var(--border-color);
-        border-radius: var(--border-radius);
-        box-shadow: var(--shadow-heavy);
-        animation: slideInRight 0.3s ease;
-    `;
-    
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.style.animation = 'slideOutRight 0.3s ease';
-            setTimeout(() => notification.remove(), 300);
-        }
-    }, 5000);
-}
-
-function getNotificationIcon(type) {
-    const icons = {
-        'success': '✅',
-        'error': '❌',
-        'warning': '⚠️',
-        'info': 'ℹ️'
+function getStatusIcon(status) {
+    const iconMap = {
+        'Online': '✅',
+        'Parking/Garage': '🅿️',
+        'Dashcam Issue': '📷',
+        'Technical Problem': '🔧',
+        'Offline': '🔴'
     };
-    return icons[type] || icons.info;
+    return iconMap[status] || '🔴';
 }
 
-// PWA Functions
-function setupPWA() {
-    // Register service worker
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js')
-            .then(registration => console.log('✅ Service Worker registered'))
-            .catch(error => console.log('❌ Service Worker registration failed'));
-    }
+function animateValue(element, start, end, duration) {
+    if (start === end) return;
     
-    // Handle install prompt
-    window.addEventListener('beforeinstallprompt', (e) => {
-        e.preventDefault();
-        installPrompt = e;
-        showInstallPrompt();
-    });
+    const range = end - start;
+    const minTimer = 50;
+    let stepTime = Math.abs(Math.floor(duration / range));
     
-    // Setup install buttons
-    document.getElementById('install-yes').addEventListener('click', installPWA);
-    document.getElementById('install-no').addEventListener('click', hideInstallPrompt);
-}
+    stepTime = Math.max(stepTime, minTimer);
+    
+    const startTime = new Date().getTime();
+    const endTime = startTime + duration;
+    let timer;
 
-function showInstallPrompt() {
-    const prompt = document.getElementById('install-prompt');
-    prompt.style.display = 'block';
-    setTimeout(() => prompt.classList.add('show'), 100);
-}
-
-function hideInstallPrompt() {
-    const prompt = document.getElementById('install-prompt');
-    prompt.classList.remove('show');
-    setTimeout(() => prompt.style.display = 'none', 300);
-}
-
-function installPWA() {
-    if (installPrompt) {
-        installPrompt.prompt();
-        installPrompt.userChoice.then((result) => {
-            if (result.outcome === 'accepted') {
-                console.log('✅ PWA installed successfully');
-                showNotification('App installed successfully!', 'success');
-            } else {
-                console.log('❌ PWA installation declined');
-            }
-            installPrompt = null;
-            hideInstallPrompt();
-        });
-    }
-}
-
-// Modal Management
-function setupModalEvents() {
-    const modal = document.getElementById('status-modal');
-    const closeBtn = modal.querySelector('.close');
-    const cancelBtn = document.getElementById('cancel-status');
-    const saveBtn = document.getElementById('save-status');
-
-    closeBtn.addEventListener('click', closeModal);
-    cancelBtn.addEventListener('click', closeModal);
-    saveBtn.addEventListener('click', saveVehicleStatus);
-
-    // Close modal on outside click
-    window.addEventListener('click', (e) => {
-        if (e.target === modal) closeModal();
-    });
-
-    // Close modal on Escape key
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && modal.style.display === 'block') {
-            closeModal();
+    function run() {
+        const now = new Date().getTime();
+        const remaining = Math.max((endTime - now) / duration, 0);
+        const value = Math.round(end - (remaining * range));
+        
+        element.textContent = value;
+        
+        if (value === end) {
+            clearInterval(timer);
         }
-    });
+    }
+    
+    timer = setInterval(run, stepTime);
+    run();
 }
 
-// Edit vehicle status
 function editVehicleStatus(vehicleNumber) {
-    if (AppState.currentUser.role !== 'Admin') {
-        showNotification('Only admins can edit vehicle status', 'warning');
-        return;
-    }
-    
-    console.log('Editing status for vehicle:', vehicleNumber);
-    document.getElementById('modal-vehicle').textContent = vehicleNumber;
+    document.getElementById('modal-vehicle').value = vehicleNumber;
     document.getElementById('status-select').value = 'Parking/Garage';
     document.getElementById('reason-input').value = '';
-    document.getElementById('status-modal').style.display = 'block';
-    
-    document.getElementById('status-modal').dataset.vehicle = vehicleNumber;
-    
-    // Focus on status select
-    setTimeout(() => document.getElementById('status-select').focus(), 100);
+    document.getElementById('status-modal').style.display = 'flex';
 }
 
-// Save vehicle status
+function closeModal() {
+    document.getElementById('status-modal').style.display = 'none';
+}
+
 async function saveVehicleStatus() {
-    const modal = document.getElementById('status-modal');
-    const vehicleNumber = modal.dataset.vehicle;
+    const vehicleNumber = document.getElementById('modal-vehicle').value;
     const status = document.getElementById('status-select').value;
     const reason = document.getElementById('reason-input').value;
     
-    console.log('Saving status:', { vehicleNumber, status, reason });
+    if (!vehicleNumber || !status) {
+        showError('Please fill in all required fields');
+        return;
+    }
     
     try {
+        showLoading(true);
+        
         if (supabaseClient) {
             const { data, error } = await supabaseClient
                 .from('offline_status')
                 .upsert({
                     vehicle_number: vehicleNumber,
                     current_status: status,
-                    reason: reason,
+                    reason: reason.trim() || null,
                     updated_at: new Date().toISOString(),
-                    updated_by: AppState.currentUser.name || 'Admin'
+                    updated_by: 'Admin'
                 });
             
             if (error) {
                 console.error('Supabase error:', error);
-                showNotification('Error saving to database', 'error');
-            } else {
-                console.log('Status saved to database');
-                showNotification('Vehicle status updated successfully!', 'success');
+                showError(`Database error: ${error.message}`);
+                return;
             }
+            
+            console.log('Status saved to database successfully');
+            showSuccess('Vehicle status updated successfully!');
         } else {
-            console.log('Supabase not available - status saved locally');
-            showNotification('Status updated (local only)', 'warning');
+            console.warn('Supabase not available, updating UI only');
+            showSuccess('Status updated (local only - database not available)');
         }
         
-        updateStatusUI(vehicleNumber, status);
+        // Update UI immediately
+        updateVehicleStatusInUI(vehicleNumber, status, reason);
         closeModal();
         
-        // Log the change for audit trail
-        logStatusChange(vehicleNumber, status, reason);
+        // Update the data source
+        const vehicle = currentData.offline.find(v => v['Vehicle Number'] === vehicleNumber);
+        if (vehicle) {
+            vehicle.Status = status;
+            vehicle.Remarks = reason || vehicle.Remarks;
+            vehicle.UpdatedAt = new Date().toISOString();
+        }
         
     } catch (error) {
-        console.error('Error saving status:', error);
-        showNotification('Error updating status. Please try again.', 'error');
+        console.error('Error saving vehicle status:', error);
+        showError('Failed to update status. Please check your internet connection and try again.');
+    } finally {
+        showLoading(false);
     }
 }
 
-// Update status in UI
-function updateStatusUI(vehicleNumber, status) {
+function updateVehicleStatusInUI(vehicleNumber, status, reason) {
+    // Update status badge
     const statusElement = document.getElementById(`status-${vehicleNumber}`);
     if (statusElement) {
-        const statusIcons = {
-            'Online': '✅ Online',
-            'Parking/Garage': '🅿️ Parking/Garage',
-            'Dashcam Issue': '📷 Dashcam Issue',
-            'Technical Problem': '🔧 Technical Problem'
-        };
-        statusElement.textContent = statusIcons[status] || status;
-        
-        const statusClasses = {
-            'Online': 'status-online',
-            'Parking/Garage': 'status-parking', 
-            'Dashcam Issue': 'status-offline',
-            'Technical Problem': 'status-technical'
-        };
-        statusElement.className = `status-badge ${statusClasses[status] || 'status-offline'}`;
-        
-        // Add update animation
-        statusElement.style.animation = 'pulse 0.5s ease-in-out';
-        setTimeout(() => statusElement.style.animation = '', 500);
-    }
-}
-
-// Close modal
-function closeModal() {
-    const modal = document.getElementById('status-modal');
-    modal.style.animation = 'slideOutScale 0.3s ease';
-    setTimeout(() => {
-        modal.style.display = 'none';
-        modal.style.animation = '';
-    }, 300);
-}
-
-// Log status changes for audit trail
-function logStatusChange(vehicleNumber, status, reason) {
-    const logEntry = {
-        timestamp: new Date().toISOString(),
-        vehicle: vehicleNumber,
-        status: status,
-        reason: reason,
-        user: AppState.currentUser.name || 'Admin',
-        sessionId: generateSessionId()
-    };
-    
-    // Store in localStorage for audit trail
-    const existingLogs = JSON.parse(localStorage.getItem('status-change-logs') || '[]');
-    existingLogs.push(logEntry);
-    
-    // Keep only last 1000 entries
-    if (existingLogs.length > 1000) {
-        existingLogs.splice(0, existingLogs.length - 1000);
+        statusElement.className = `status-badge ${getStatusClass(status)}`;
+        statusElement.textContent = `${getStatusIcon(status)} ${status}`;
     }
     
-    localStorage.setItem('status-change-logs', JSON.stringify(existingLogs));
-}
-
-// Keyboard shortcuts
-function setupKeyboardShortcuts() {
-    document.addEventListener('keydown', (e) => {
-        // Only handle shortcuts when not in input fields
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
-            return;
-        }
-        
-        // Handle shortcuts
-        if (e.ctrlKey || e.metaKey) {
-            switch (e.key.toLowerCase()) {
-                case 'r':
-                    e.preventDefault();
-                    refreshData();
-                    break;
-                case 'e':
-                    e.preventDefault();
-                    exportToPDF();
-                    break;
-                case 'f':
-                    e.preventDefault();
-                    document.getElementById('global-search').focus();
-                    break;
-                case 't':
-                    e.preventDefault();
-                    toggleTheme();
-                    break;
-            }
-        } else {
-            // Tab switching shortcuts
-            switch (e.key) {
-                case '1':
-                    switchTab('offline');
-                    break;
-                case '2':
-                    switchTab('ai-alerts');
-                    break;
-                case '3':
-                    switchTab('speed');
-                    break;
-                case '4':
-                    switchTab('insights');
-                    break;
-                case 'Escape':
-                    // Clear all filters
-                    resetAllFilters();
-                    applyFilters();
-                    break;
-            }
-        }
-    });
-    
-    // Show keyboard shortcuts help
-    console.log('⌨️ Keyboard shortcuts available:');
-    console.log('Ctrl+R: Refresh data');
-    console.log('Ctrl+E: Export PDF');
-    console.log('Ctrl+F: Focus search');
-    console.log('Ctrl+T: Toggle theme');
-    console.log('1-4: Switch tabs');
-    console.log('Escape: Clear filters');
-}
-
-// Update last updated time
-function updateLastUpdated() {
-    const lastUpdatedElement = document.getElementById('last-updated');
-    if (lastUpdatedElement) {
-        const now = new Date();
-        lastUpdatedElement.textContent = now.toLocaleTimeString('en-GB', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        });
-        
-        // Add subtle animation
-        lastUpdatedElement.style.animation = 'fadeIn 0.3s ease';
-        setTimeout(() => lastUpdatedElement.style.animation = '', 300);
-    }
-}
-
-// Show/hide loading
-function showLoading(show = true) {
-    const loading = document.getElementById('loading');
-    if (loading) {
-        loading.style.display = show ? 'flex' : 'none';
-        
-        if (show) {
-            loading.style.animation = 'fadeIn 0.3s ease';
-        } else {
-            loading.style.animation = 'fadeOut 0.3s ease';
-            setTimeout(() => {
-                if (!show) loading.style.display = 'none';
-            }, 300);
+    // Update remarks in table if visible
+    const tableRow = statusElement?.closest('tr');
+    if (tableRow && reason) {
+        const remarksCell = tableRow.cells[4]; // Assuming remarks is the 5th column (index 4)
+        if (remarksCell) {
+            remarksCell.textContent = reason || '-';
         }
     }
 }
 
-// Utility Functions
-function generateSessionId() {
-    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+// Sample Data Fallbacks
+function getSampleOfflineData() {
+    return [
+        { 'Vehicle Number': 'AP39HS4926', 'Last Online': '2025-08-20', 'Offline Since (hrs)': '112', 'Remarks': 'Parked at depot', 'Status': 'Parking/Garage' },
+        { 'Vehicle Number': 'AS01EH6877', 'Last Online': '2025-05-12', 'Offline Since (hrs)': '2515', 'Remarks': 'Under maintenance', 'Status': 'Technical Problem' },
+        { 'Vehicle Number': 'BR01PK9758', 'Last Online': '2025-08-23', 'Offline Since (hrs)': '52', 'Remarks': 'Driver sick leave', 'Status': 'Offline' },
+        { 'Vehicle Number': 'CG04MY9667', 'Last Online': '2025-05-09', 'Offline Since (hrs)': '2586', 'Remarks': 'GPS connectivity issue', 'Status': 'Technical Problem' },
+        { 'Vehicle Number': 'CH01CK2912', 'Last Online': '2025-08-25', 'Offline Since (hrs)': '48', 'Remarks': 'Technical checkup pending', 'Status': 'Technical Problem' }
+    ];
 }
 
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
+function getSampleAlertsData() {
+    return [
+        { plateNo: 'HR47G5244', company: 'North', alarmType: 'Distracted Driving', startingTime: '08:30:07', imageLink: 'https://drive.google.com/file/d/1qd6w' },
+        { plateNo: 'HR55AX4712', company: 'North', alarmType: 'Call Alarm', startingTime: '16:09:09', imageLink: 'https://drive.google.com/file/d/1wjn' },
+        { plateNo: 'HR63F2958', company: 'North', alarmType: 'Unfastened Seatbelt', startingTime: '07:54:47', imageLink: 'https://drive.google.com/file/d/1v8l' },
+        { plateNo: 'HR63F2958', company: 'North', alarmType: 'Unfastened Seatbelt', startingTime: '08:31:05', imageLink: '' },
+        { plateNo: 'HR47G5244', company: 'North', alarmType: 'Distracted Driving', startingTime: '11:19:28', imageLink: 'https://drive.google.com/file/d/1wD0' }
+    ];
 }
 
-function throttle(func, limit) {
-    let inThrottle;
-    return function() {
-        const args = arguments;
-        const context = this;
-        if (!inThrottle) {
-            func.apply(context, args);
-            inThrottle = true;
-            setTimeout(() => inThrottle = false, limit);
-        }
-    };
+function getSampleSpeedData() {
+    return [
+        { plateNo: 'HR63F2958', company: 'North', startingTime: '05:58:13', speed: 94.5 },
+        { plateNo: 'TS08HC6654', company: 'South', startingTime: '16:46:15', speed: 92.9 },
+        { plateNo: 'TS08HC6654', company: 'South', startingTime: '11:44:44', speed: 90.1 },
+        { plateNo: 'HR55AX4712', company: 'North', startingTime: '16:09:09', speed: 88.2 },
+        { plateNo: 'HR63F2958', company: 'North', startingTime: '07:54:47', speed: 95.1 },
+        { plateNo: 'TS08HC6654', company: 'South', startingTime: '12:40:42', speed: 77.5 }
+    ];
 }
 
-// Performance monitoring
-function trackPerformance(eventName, startTime = performance.now()) {
-    const endTime = performance.now();
-    const duration = endTime - startTime;
-    console.log(`⚡ Performance: ${eventName} took ${duration.toFixed(2)}ms`);
-    
-    // Store performance metrics
-    const perfData = JSON.parse(localStorage.getItem('performance-metrics') || '{}');
-    if (!perfData[eventName]) perfData[eventName] = [];
-    
-    perfData[eventName].push({
-        duration: duration,
-        timestamp: new Date().toISOString()
-    });
-    
-    // Keep only last 100 measurements per event
-    if (perfData[eventName].length > 100) {
-        perfData[eventName] = perfData[eventName].slice(-100);
-    }
-    
-    localStorage.setItem('performance-metrics', JSON.stringify(perfData));
-}
-
-// Error handling and reporting
-window.addEventListener('error', (e) => {
-    console.error('❌ Global error:', e.error);
-    
-    const errorReport = {
-        message: e.message,
-        filename: e.filename,
-        lineno: e.lineno,
-        colno: e.colno,
-        stack: e.error?.stack,
-        timestamp: new Date().toISOString(),
-        userAgent: navigator.userAgent,
-        url: window.location.href,
-        user: AppState.currentUser.name
-    };
-    
-    // Store error for debugging
-    const errors = JSON.parse(localStorage.getItem('error-logs') || '[]');
-    errors.push(errorReport);
-    
-    // Keep only last 50 errors
-    if (errors.length > 50) {
-        errors.splice(0, errors.length - 50);
-    }
-    
-    localStorage.setItem('error-logs', JSON.stringify(errors));
-    
-    // Show user-friendly error message
-    showNotification('An error occurred. The issue has been logged.', 'error');
-});
-
-// Unhandled promise rejections
-window.addEventListener('unhandledrejection', (e) => {
-    console.error('❌ Unhandled promise rejection:', e.reason);
-    
-    const errorReport = {
-        type: 'unhandledrejection',
-        reason: e.reason?.toString(),
-        stack: e.reason?.stack,
-        timestamp: new Date().toISOString(),
-        url: window.location.href
-    };
-    
-    const errors = JSON.parse(localStorage.getItem('error-logs') || '[]');
-    errors.push(errorReport);
-    localStorage.setItem('error-logs', JSON.stringify(errors));
-    
-    showNotification('A background error occurred.', 'warning');
-});
-
-// Network status monitoring
-function setupNetworkMonitoring() {
-    window.addEventListener('online', () => {
-        showNotification('Connection restored', 'success');
-        console.log('🌐 Back online');
-        // Refresh data when connection is restored
-        loadAllData();
-    });
-
-    window.addEventListener('offline', () => {
-        showNotification('Connection lost. Working in offline mode.', 'warning');
-        console.log('🚫 Gone offline');
-    });
-
-    // Check initial connection status
-    if (!navigator.onLine) {
-        showNotification('No internet connection. Some features may be limited.', 'warning');
-    }
-}
-
-// Initialize network monitoring
-document.addEventListener('DOMContentLoaded', () => {
-    setupNetworkMonitoring();
-});
-
-// Memory management - cleanup old data
-function cleanupMemory() {
-    // Clear old performance metrics
-    const perfData = JSON.parse(localStorage.getItem('performance-metrics') || '{}');
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - 7); // Keep 7 days of data
-    
-    Object.keys(perfData).forEach(eventName => {
-        perfData[eventName] = perfData[eventName].filter(entry => 
-            new Date(entry.timestamp) > cutoffDate
-        );
-    });
-    
-    localStorage.setItem('performance-metrics', JSON.stringify(perfData));
-    
-    // Clear old error logs
-    const errors = JSON.parse(localStorage.getItem('error-logs') || '[]');
-    const recentErrors = errors.filter(error => 
-        new Date(error.timestamp) > cutoffDate
-    );
-    localStorage.setItem('error-logs', JSON.stringify(recentErrors));
-    
-    console.log('🧹 Memory cleanup completed');
-}
-
-// Run cleanup daily
-setInterval(cleanupMemory, 24 * 60 * 60 * 1000);
-
-// Advanced search functionality
-function setupAdvancedSearch() {
-    const searchInput = document.getElementById('global-search');
-    
-    searchInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            performAdvancedSearch(searchInput.value);
-        }
-    });
-}
-
-function performAdvancedSearch(query) {
-    if (!query.trim()) return;
-    
-    const results = {
-        offline: [],
-        speed: [],
-        alerts: []
-    };
-    
-    // Smart search across all data
-    const searchTerms = query.toLowerCase().split(' ');
-    
-    AppState.data.offline.forEach(item => {
-        const searchableText = `${item['Vehicle Number']} ${item.client} ${item['Remarks']} ${item.location}`.toLowerCase();
-        if (searchTerms.every(term => searchableText.includes(term))) {
-            results.offline.push(item);
-        }
-    });
-    
-    AppState.data.speed.forEach(item => {
-        const searchableText = `${item.plateNo} ${item.company} ${item.location} ${item.speed}`.toLowerCase();
-        if (searchTerms.every(term => searchableText.includes(term))) {
-            results.speed.push(item);
-        }
-    });
-    
-    AppState.data.alerts.forEach(item => {
-        const searchableText = `${item.plateNo} ${item.company} ${item.alarmType} ${item.location}`.toLowerCase();
-        if (searchTerms.every(term => searchableText.includes(term))) {
-            results.alerts.push(item);
-        }
-    });
-    
-    // Display search results
-    displaySearchResults(results, query);
-}
-
-function displaySearchResults(results, query) {
-    const totalResults = results.offline.length + results.speed.length + results.alerts.length;
-    
-    if (totalResults === 0) {
-        showNotification(`No results found for "${query}"`, 'info');
-        return;
-    }
-    
-    showNotification(`Found ${totalResults} results for "${query}"`, 'success');
-    
-    // Update UI with filtered results
-    updateOfflineUI(results.offline);
-    updateSpeedUI(results.speed);
-    updateAIAlertsUI(results.alerts);
-    
-    console.log(`🔍 Search results for "${query}":`, results);
-}
-
-// Initialize advanced search
-document.addEventListener('DOMContentLoaded', () => {
-    setupAdvancedSearch();
-});
-
-// Data validation functions
-function validateVehicleNumber(vehicleNumber) {
-    // Indian vehicle number pattern: XX##YY#### or XX##Y#### or XX#####
-    const pattern = /^[A-Z]{2}[0-9]{1,2}[A-Z]{0,2}[0-9]{4}$/;
-    return pattern.test(vehicleNumber);
-}
-
-function validateSpeed(speed) {
-    return typeof speed === 'number' && speed >= 0 && speed <= 300;
-}
-
-function validateTimestamp(timestamp) {
-    const date = new Date(timestamp);
-    return !isNaN(date.getTime());
-}
-
-// Data sanitization
-function sanitizeData(data, type) {
-    if (!Array.isArray(data)) return [];
-    
-    return data.filter(item => {
-        switch (type) {
-            case 'offline':
-                return item && item['Vehicle Number'] && validateVehicleNumber(item['Vehicle Number']);
-            case 'speed':
-                return item && item.plateNo && item.speed && validateSpeed(item.speed);
-            case 'alerts':
-                return item && item.plateNo && item.alarmType;
-            default:
-                return true;
-        }
-    }).map(item => {
-        // Sanitize strings
-        Object.keys(item).forEach(key => {
-            if (typeof item[key] === 'string') {
-                item[key] = item[key].trim().replace(/[<>]/g, '');
-            }
-        });
-        return item;
-    });
-}
-
-// Version check and update notification
-function checkForUpdates() {
-    const currentVersion = CONFIG.app.version;
-    const lastKnownVersion = localStorage.getItem('app-version');
-    
-    if (lastKnownVersion && lastKnownVersion !== currentVersion) {
-        showNotification(`App updated to version ${currentVersion}! 🎉`, 'success');
-        
-        // Show changelog if available
-        console.log(`📝 Updated from ${lastKnownVersion} to ${currentVersion}`);
-    }
-    
-    localStorage.setItem('app-version', currentVersion);
-}
-
-// Initialize version check
-document.addEventListener('DOMContentLoaded', () => {
-    checkForUpdates();
-});
-
-// Accessibility improvements
-function setupAccessibility() {
-    // Add skip links
-    const skipLink = document.createElement('a');
-    skipLink.href = '#main-content';
-    skipLink.textContent = 'Skip to main content';
-    skipLink.className = 'skip-link';
-    skipLink.style.cssText = `
-        position: absolute;
-        top: -40px;
-        left: 6px;
-        background: var(--primary-color);
+// Error handling
+function showError(message) {
+    const errorDiv = document.createElement('div');
+    errorDiv.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #ef4444, #dc2626);
         color: white;
-        padding: 8px;
-        text-decoration: none;
-        border-radius: 4px;
-        z-index: 10000;
-        transition: top 0.3s;
+        padding: 1rem 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(239, 68, 68, 0.3);
+        z-index: 10001;
+        max-width: 400px;
+        font-weight: 500;
     `;
+    errorDiv.textContent = message;
     
-    skipLink.addEventListener('focus', () => {
-        skipLink.style.top = '6px';
-    });
+    document.body.appendChild(errorDiv);
     
-    skipLink.addEventListener('blur', () => {
-        skipLink.style.top = '-40px';
-    });
-    
-    document.body.insertBefore(skipLink, document.body.firstChild);
-    
-    // Add main content ID
-    const mainContent = document.querySelector('.tab-content');
-    if (mainContent) {
-        mainContent.id = 'main-content';
-    }
-    
-    // Ensure all interactive elements are keyboard accessible
-    const interactiveElements = document.querySelectorAll('button, a, input, select, textarea');
-    interactiveElements.forEach(element => {
-        if (!element.getAttribute('tabindex')) {
-            element.setAttribute('tabindex', '0');
+    setTimeout(() => {
+        if (errorDiv.parentNode) {
+            errorDiv.parentNode.removeChild(errorDiv);
         }
-    });
+    }, 5000);
 }
 
-// Initialize accessibility features
-document.addEventListener('DOMContentLoaded', () => {
-    setupAccessibility();
-});
+function showSuccess(message) {
+    const successDiv = document.createElement('div');
+    successDiv.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: white;
+        padding: 1rem 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(16, 185, 129, 0.3);
+        z-index: 10001;
+        max-width: 400px;
+        font-weight: 500;
+    `;
+    successDiv.textContent = message;
+    
+    document.body.appendChild(successDiv);
+    
+    setTimeout(() => {
+        if (successDiv.parentNode) {
+            successDiv.parentNode.removeChild(successDiv);
+        }
+    }, 3000);
+}
 
-// Final initialization
-console.log(`🚀 G4S Enhanced Fleet Dashboard v${CONFIG.app.version} fully loaded`);
-console.log('📊 Features: Smart Filters, AI Insights, PWA, Role Management, Advanced Export');
-console.log('🎯 Ready for production use!');
+function exportToPDF() {
+    try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        // Header
+        doc.setFontSize(20);
+        doc.text('G4S Fleet Management Report', 20, 20);
+        
+        doc.setFontSize(12);
+        doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 20, 30);
+        doc.text(`Report Period: ${currentPeriod.toUpperCase()}`, 20, 40);
+        doc.text(`Current Tab: ${currentTab.replace('-', ' ').toUpperCase()}`, 20, 50);
+        
+        // Add data based on current tab
+        let tableData = [];
+        let headers = [];
+        
+        switch(currentTab) {
+            case 'offline':
+                headers = ['Vehicle', 'Last Online', 'Offline Hours', 'Status', 'Remarks'];
+                tableData = currentData.offline.map(item => [
+                    item['Vehicle Number'],
+                    item['Last Online'],
+                    item['Offline Since (hrs)'] + 'h',
+                    item['Status'] || 'Offline',
+                    item['Remarks'] || '-'
+                ]);
+                break;
+            case 'ai-alerts':
+                if (currentPeriod === 'daily') {
+                    headers = ['Vehicle', 'Company', 'Alert Type', 'Time'];
+                    tableData = currentData.alerts.map(item => [
+                        item.plateNo,
+                        item.company,
+                        item.alarmType,
+                        item.startingTime
+                    ]);
+                } else {
+                    headers = ['Vehicle', 'Company', 'Alert Type', 'Count', 'Avg/Day'];
+                    tableData = currentData.alerts.map(item => [
+                        item.plateNo,
+                        item.company,
+                        item.alarmType,
+                        item.count.toString(),
+                        item.avgPerDay.toFixed(1)
+                    ]);
+                }
+                break;
+            case 'speed':
+                headers = ['Vehicle', 'Company', 'Max Speed', 'Warnings', 'Alarms', 'Total'];
+                tableData = currentData.speed.map(item => [
+                    item.plateNo,
+                    item.company,
+                    (item.maxSpeed || item.speed).toFixed(1) + ' km/h',
+                    (item.warnings || (item.speed >= 75 && item.speed < 90 ? 1 : 0)).toString(),
+                    (item.alarms || (item.speed >= 90 ? 1 : 0)).toString(),
+                    (item.violations || 1).toString()
+                ]);
+                break;
+        }
+        
+        doc.autoTable({
+            head: [headers],
+            body: tableData,
+            startY: 60,
+            styles: {
+                fontSize: 8,
+                cellPadding: 3
+            },
+            headStyles: {
+                fillColor: [102, 126, 234],
+                textColor: 255
+            }
+        });
+        
+        // Save the PDF
+        const filename = `G4S-${currentTab}-report-${currentPeriod}-${new Date().toISOString().split('T')[0]}.pdf`;
+        doc.save(filename);
+        
+    } catch (error) {
+        console.error('PDF export error:', error);
+        showError('Error generating PDF. Please try again.');
+    }
+}
+
+// Auto-refresh functionality
+function startAutoRefresh() {
+    // Refresh data every 5 minutes
+    setInterval(() => {
+        if (document.visibilityState === 'visible') {
+            console.log('Auto-refreshing data...');
+            loadDataForCurrentTab();
+        }
+    }, 5 * 60 * 1000); // 5 minutes
+}
