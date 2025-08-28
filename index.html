@@ -55,13 +55,16 @@
                         <button class="toggle-btn" data-period="monthly">Monthly</button>
                     </div>
                     
-                    <!-- Date Selector -->
+                    <!-- Date Selector with Range Picker -->
                     <div class="date-selector">
                         <select class="date-input" id="date-select">
                             <option value="25 August">25 August</option>
                             <option value="24 August">24 August</option>
                             <option value="23 August">23 August</option>
                         </select>
+                        <button class="btn btn-secondary" id="date-range-btn">
+                            <span>📅</span> Range
+                        </button>
                     </div>
                     
                     <!-- Theme Toggle -->
@@ -288,6 +291,20 @@
                                 <canvas id="alert-type-chart"></canvas>
                             </div>
                         </div>
+                        
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <div class="chart-title">Alert Trend Analysis</div>
+                                <div class="chart-options">
+                                    <div class="chart-option"></div>
+                                    <div class="chart-option"></div>
+                                    <div class="chart-option"></div>
+                                </div>
+                            </div>
+                            <div class="chart-container">
+                                <canvas id="alert-trend-chart"></canvas>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="table-card">
@@ -404,6 +421,20 @@
                                 <canvas id="speed-category-chart"></canvas>
                             </div>
                         </div>
+                        
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <div class="chart-title">Speed Trend Analysis</div>
+                                <div class="chart-options">
+                                    <div class="chart-option"></div>
+                                    <div class="chart-option"></div>
+                                    <div class="chart-option"></div>
+                                </div>
+                            </div>
+                            <div class="chart-container">
+                                <canvas id="speed-trend-chart"></canvas>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="table-card">
@@ -468,6 +499,30 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" id="cancel-status">Cancel</button>
                 <button class="btn btn-primary" id="save-status">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Date Range Picker Modal -->
+    <div id="date-range-modal" class="date-range-modal">
+        <div class="date-range-content">
+            <div class="date-range-header">
+                <div class="date-range-title">Select Date Range</div>
+                <button class="date-range-close" id="date-range-close">✕</button>
+            </div>
+            <div class="date-range-body">
+                <div class="date-input-group">
+                    <label>From Date</label>
+                    <input type="date" id="from-date" class="form-input">
+                </div>
+                <div class="date-input-group">
+                    <label>To Date</label>
+                    <input type="date" id="to-date" class="form-input">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancel-range">Cancel</button>
+                <button class="btn btn-primary" id="apply-range">Apply Range</button>
             </div>
         </div>
     </div>
