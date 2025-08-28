@@ -75,11 +75,178 @@ function setupEventListeners() {
     document.getElementById('refresh-btn').addEventListener('click', loadDataForCurrentTab);
     document.getElementById('export-btn').addEventListener('click', exportToPDF);
 
+    // Date range picker
+    document.getElementById('date-range-btn').addEventListener('click', openDateRangePicker);
+    document.getElementById('date-range-close').addEventListener('click', closeDateRangePicker);
+    document.getElementById('cancel-range').addEventListener('click', closeDateRangePicker);
+    document.getElementById('apply-range').addEventListener('click', applyDateRange);
+
     // Modal events
     setupModalEvents();
     
     // Table filters
     setupTableFilters();
+}
+
+function openDateRangePicker() {
+    document.getElementById('date-range-modal').style.display = 'flex';
+    
+    // Set default dates
+    const today = new Date();
+    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    
+    document.getElementById('to-date').value = today.toISOString().split('T')[0];
+    document.getElementById('from-date').value = weekAgo.toISOString().split('T')[0];
+}
+
+function closeDateRangePicker() {
+    document.getElementById('date-range-modal').style.display = 'none';
+}
+
+function applyDateRange() {
+    const fromDate = document.getElementById('from-date').value;
+    const toDate = document.getElementById('to-date').value;
+    
+    if (!fromDate || !toDate) {
+        showError('Please select both from and to dates');
+        return;
+    }
+    
+    if (new Date(fromDate) > new Date(toDate)) {
+        showError('From date cannot be later than to date');
+        return;
+    }
+    
+    console.log(`Applying date range: ${fromDate} to ${toDate}`);
+    showSuccess(`Date range applied: ${fromDate} to ${toDate}`);
+    closeDateRangePicker();
+    
+    // Here you can add logic to filter data based on date range
+    // For now, we'll just reload current data
+    loadDataForCurrentTab();
+}
+
+async function loadDailySpeedData() {
+    const selectedDate = document.getElementById('date-select').value;
+    const gidMap = {
+        '25 August': '293366971',
+        '24 August': '0',
+        '23 August': '1',
+        '22 August': '2',
+        '21 August': '3',
+        '29-07-25': '4',
+        '30-07-25': '5',
+        '31-07-25': '6'
+    };
+    
+    const gid = gidMap[selectedDate] || '293366971';
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.speed}/export?format=csv&gid=${gid}`;
+    
+    const csvText = await fetchWithFallback(csvUrl);
+    if (!csvText) throw new Error('Failed to fetch speed data');
+    
+    const parsed = Papa.parse(csvText, { 
+        header: true, 
+        skipEmptyLines: true,
+        transformHeader: header => header.trim()
+    });
+    
+    const filteredData = parsed.data.filter(row => {
+        const speed = parseFloat(row['Speed(Km/h)'] || row['speed'] || 0);
+        const plateNo = row['Plate NO.'] || row['plate_no'] || row['Vehicle'];
+        return speed >= 75 && plateNo;
+    }).map(row => ({
+        plateNo: row['Plate NO.'] || row['plate_no'] || row['Vehicle'] || '',
+        company: row['Company'] || row['company'] || '',
+        startingTime: row['Starting time'] || row['starting_time'] || row['Time'] || '',
+        speed: parseFloat(row['Speed(Km/h)'] || row['speed'] || 0)
+    }));
+    
+    cacheData('speed', filteredData);
+    return filteredData;
+}
+
+async function loadWeeklySpeedData() {
+    const selectedWeek = document.getElementById('date-select').value;
+    let dates = [];
+    
+    // Define date ranges for different weeks
+    switch(selectedWeek) {
+        case 'week-25-aug':
+            dates = ['25 August', '24 August', '23 August', '22 August', '21 August'];
+            break;
+        case 'week-18-aug':
+            dates = ['23 August', '22 August', '21 August'];
+            break;
+        case 'week-29-jul':
+            dates = ['29-07-25', '30-07-25', '31-07-25'];
+            break;
+        default:
+            dates = ['25 August', '24 August', '23 August'];
+    }
+    
+    const promises = dates.map(date => loadSingleDaySpeedData(date));
+    const dailyData = await Promise.all(promises);
+    const allViolations = dailyData.flat();
+    
+    // Aggregate by vehicle
+    const aggregated = allViolations.reduce((acc, violation) => {
+        if (!violation.plateNo) return acc;
+        
+        const key = violation.plateNo;
+        if (!acc[key]) {
+            acc[key] = {
+                plateNo: violation.plateNo,
+                company: violation.company,
+                violations: 0,
+                maxSpeed: 0,
+                warnings: 0,
+                alarms: 0
+            };
+        }
+        acc[key].violations++;
+        acc[key].maxSpeed = Math.max(acc[key].maxSpeed, violation.speed);
+        if (violation.speed >= 90) acc[key].alarms++;
+        else if (violation.speed >= 75) acc[key].warnings++;
+        return acc;
+    }, {});
+    
+    return Object.values(aggregated).sort((a, b) => b.violations - a.violations);
+}
+
+async function loadSingleDaySpeedData(date) {
+    try {
+        const gidMap = {
+            '25 August': '293366971',
+            '24 August': '0',
+            '23 August': '1',
+            '22 August': '2',
+            '21 August': '3',
+            '29-07-25': '4',
+            '30-07-25': '5',
+            '31-07-25': '6'
+        };
+        
+        const gid = gidMap[date] || '293366971';
+        const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.speed}/export?format=csv&gid=${gid}`;
+        
+        const csvText = await fetchWithFallback(csvUrl);
+        if (!csvText) return [];
+        
+        const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+        return parsed.data.filter(row => {
+            const speed = parseFloat(row['Speed(Km/h)'] || 0);
+            return speed >= 75 && row['Plate NO.'];
+        }).map(row => ({
+            plateNo: row['Plate NO.'],
+            company: row['Company'],
+            speed: parseFloat(row['Speed(Km/h)']),
+            startingTime: row['Starting time'] || ''
+        }));
+    } catch (error) {
+        console.error(`Error loading speed data for ${date}:`, error);
+        return [];
+    }
 }
 
 function setupModalEvents() {
@@ -146,12 +313,18 @@ function updateDateSelector() {
             <option value="25 August">25 August</option>
             <option value="24 August">24 August</option>
             <option value="23 August">23 August</option>
+            <option value="22 August">22 August</option>
+            <option value="21 August">21 August</option>
+            <option value="29-07-25">29-07-25</option>
+            <option value="30-07-25">30-07-25</option>
+            <option value="31-07-25">31-07-25</option>
         `;
     } else if (currentPeriod === 'weekly') {
         dateSelect.innerHTML = `
             <option value="week-25-aug">Week of Aug 19-25</option>
             <option value="week-18-aug">Week of Aug 12-18</option>
             <option value="week-11-aug">Week of Aug 5-11</option>
+            <option value="week-29-jul">Week of Jul 29-31</option>
         `;
     } else if (currentPeriod === 'monthly') {
         dateSelect.innerHTML = `
@@ -984,7 +1157,7 @@ function updateOfflineCharts(data) {
 }
 
 function updateAIAlertsCharts(data) {
-    // Similar chart updates for AI Alerts
+    // Vehicle alerts bar chart
     const vehicleAlertsCtx = document.getElementById('vehicle-alerts-chart').getContext('2d');
     if (charts.vehicleAlerts) charts.vehicleAlerts.destroy();
     
@@ -1013,14 +1186,34 @@ function updateAIAlertsCharts(data) {
                 label: currentPeriod === 'daily' ? 'Alerts' : 'Total Alerts',
                 data: chartData.data,
                 backgroundColor: '#f59e0b',
-                borderRadius: 8
+                borderRadius: 8,
+                borderWidth: 0
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true } }
+            plugins: { 
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    titleColor: '#fff',
+                    bodyColor: '#fff',
+                    borderColor: '#f59e0b',
+                    borderWidth: 1
+                }
+            },
+            scales: { 
+                y: { 
+                    beginAtZero: true,
+                    grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                    ticks: { color: '#94a3b8' }
+                },
+                x: { 
+                    grid: { display: false },
+                    ticks: { color: '#94a3b8' }
+                }
+            }
         }
     });
     
@@ -1048,19 +1241,114 @@ function updateAIAlertsCharts(data) {
             datasets: [{
                 data: Object.values(alertTypes),
                 backgroundColor: ['#ef4444', '#f59e0b', '#8b5cf6', '#ec4899', '#6b7280'],
-                borderWidth: 0
+                borderWidth: 0,
+                hoverOffset: 10
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { position: 'bottom' } }
+            plugins: { 
+                legend: { 
+                    position: 'bottom',
+                    labels: {
+                        color: '#94a3b8',
+                        padding: 20,
+                        usePointStyle: true
+                    }
+                }
+            }
         }
     });
+    
+    // Add line chart for trend analysis
+    const alertTrendCtx = document.getElementById('alert-trend-chart')?.getContext('2d');
+    if (alertTrendCtx) {
+        if (charts.alertTrend) charts.alertTrend.destroy();
+        
+        // Generate trend data based on period
+        let trendData;
+        if (currentPeriod === 'daily') {
+            // Hourly trend for daily view
+            const hourlyData = Array(24).fill(0);
+            data.forEach(alert => {
+                const hour = parseInt(alert.startingTime?.split(':')[0] || 0);
+                if (hour >= 0 && hour <= 23) {
+                    hourlyData[hour]++;
+                }
+            });
+            trendData = {
+                labels: Array.from({length: 24}, (_, i) => i + ':00'),
+                data: hourlyData
+            };
+        } else {
+            // Daily trend for weekly/monthly view
+            const dailyData = data.reduce((acc, item) => {
+                const vehicle = item.plateNo.slice(-6);
+                acc[vehicle] = item.count || 0;
+                return acc;
+            }, {});
+            trendData = {
+                labels: Object.keys(dailyData),
+                data: Object.values(dailyData)
+            };
+        }
+        
+        charts.alertTrend = new Chart(alertTrendCtx, {
+            type: 'line',
+            data: {
+                labels: trendData.labels,
+                datasets: [{
+                    label: 'Alert Trend',
+                    data: trendData.data,
+                    borderColor: '#667eea',
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: '#667eea',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 6,
+                    pointHoverRadius: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        titleColor: '#fff',
+                        bodyColor: '#fff',
+                        borderColor: '#667eea',
+                        borderWidth: 1
+                    }
+                },
+                scales: {
+                    y: { 
+                        beginAtZero: true,
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        ticks: { color: '#94a3b8' }
+                    },
+                    x: { 
+                        grid: { display: false },
+                        ticks: { color: '#94a3b8' }
+                    }
+                },
+                elements: {
+                    point: {
+                        hoverBackgroundColor: '#667eea'
+                    }
+                }
+            }
+        });
+    }
 }
 
 function updateSpeedCharts(data) {
-    // Similar chart updates for Speed data
+    // Speed violations bar chart
     const speedViolationsCtx = document.getElementById('speed-violations-chart').getContext('2d');
     if (charts.speedViolations) charts.speedViolations.destroy();
     
@@ -1089,14 +1377,34 @@ function updateSpeedCharts(data) {
                 label: 'Violations',
                 data: chartData.data,
                 backgroundColor: '#ef4444',
-                borderRadius: 8
+                borderRadius: 8,
+                borderWidth: 0
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true } }
+            plugins: { 
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    titleColor: '#fff',
+                    bodyColor: '#fff',
+                    borderColor: '#ef4444',
+                    borderWidth: 1
+                }
+            },
+            scales: { 
+                y: { 
+                    beginAtZero: true,
+                    grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                    ticks: { color: '#94a3b8' }
+                },
+                x: { 
+                    grid: { display: false },
+                    ticks: { color: '#94a3b8' }
+                }
+            }
         }
     });
     
@@ -1120,15 +1428,110 @@ function updateSpeedCharts(data) {
             datasets: [{
                 data: [warnings, alarms],
                 backgroundColor: ['#f59e0b', '#ef4444'],
-                borderWidth: 0
+                borderWidth: 0,
+                hoverOffset: 10
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { position: 'bottom' } }
+            plugins: { 
+                legend: { 
+                    position: 'bottom',
+                    labels: {
+                        color: '#94a3b8',
+                        padding: 20,
+                        usePointStyle: true
+                    }
+                }
+            }
         }
     });
+    
+    // Add speed trend line chart
+    const speedTrendCtx = document.getElementById('speed-trend-chart')?.getContext('2d');
+    if (speedTrendCtx) {
+        if (charts.speedTrend) charts.speedTrend.destroy();
+        
+        // Generate trend data based on period
+        let trendData;
+        if (currentPeriod === 'daily') {
+            // Hourly speed violations trend
+            const hourlyData = Array(24).fill(0);
+            data.forEach(violation => {
+                const hour = parseInt(violation.startingTime?.split(':')[0] || 0);
+                if (hour >= 0 && hour <= 23) {
+                    hourlyData[hour]++;
+                }
+            });
+            trendData = {
+                labels: Array.from({length: 24}, (_, i) => i + ':00'),
+                data: hourlyData
+            };
+        } else {
+            // Vehicle-wise trend for weekly/monthly view
+            const vehicleData = data.reduce((acc, item) => {
+                const vehicle = item.plateNo.slice(-6);
+                acc[vehicle] = item.violations || 0;
+                return acc;
+            }, {});
+            trendData = {
+                labels: Object.keys(vehicleData),
+                data: Object.values(vehicleData)
+            };
+        }
+        
+        charts.speedTrend = new Chart(speedTrendCtx, {
+            type: 'line',
+            data: {
+                labels: trendData.labels,
+                datasets: [{
+                    label: 'Speed Trend',
+                    data: trendData.data,
+                    borderColor: '#ef4444',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: '#ef4444',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    pointRadius: 6,
+                    pointHoverRadius: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        titleColor: '#fff',
+                        bodyColor: '#fff',
+                        borderColor: '#ef4444',
+                        borderWidth: 1
+                    }
+                },
+                scales: {
+                    y: { 
+                        beginAtZero: true,
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        ticks: { color: '#94a3b8' }
+                    },
+                    x: { 
+                        grid: { display: false },
+                        ticks: { color: '#94a3b8' }
+                    }
+                },
+                elements: {
+                    point: {
+                        hoverBackgroundColor: '#ef4444'
+                    }
+                }
+            }
+        });
+    }
 }
 
 function getStatusClass(status) {
