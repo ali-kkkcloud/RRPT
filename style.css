@@ -732,6 +732,12 @@ body {
 }
 
 /* Responsive */
+@media (max-width: 1200px) {
+    .charts-section {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
 @media (max-width: 1024px) {
     .sidebar {
         transform: translateX(-100%);
@@ -743,6 +749,15 @@ body {
 
     .main-content {
         margin-left: 0;
+        width: 100%;
+    }
+    
+    .charts-section {
+        grid-template-columns: 1fr;
+    }
+    
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
     }
 }
 
@@ -750,25 +765,223 @@ body {
     .top-header {
         flex-direction: column;
         align-items: stretch;
+        gap: 1rem;
+    }
+
+    .header-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
     }
 
     .stats-grid {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: 1fr;
+        gap: 1rem;
     }
 
     .charts-section {
         grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .content-area {
+        padding: 1rem;
+    }
+    
+    .stat-card {
+        padding: 1.5rem;
+    }
+    
+    .chart-card {
+        padding: 1.5rem;
     }
 }
 
 @media (max-width: 480px) {
-    .stats-grid {
-        grid-template-columns: 1fr;
+    .sidebar {
+        width: 100%;
     }
-
-    .content-area {
+    
+    .logo-section {
+        padding: 0 1rem 1rem;
+    }
+    
+    .nav-menu {
+        padding: 0 0.5rem;
+    }
+    
+    .top-header {
         padding: 1rem;
     }
+    
+    .content-area {
+        padding: 0.5rem;
+    }
+    
+    .stat-card {
+        padding: 1rem;
+    }
+    
+    .chart-card {
+        padding: 1rem;
+    }
+    
+    .table-header {
+        padding: 1rem;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .table-filters {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .modal-content {
+        margin: 2rem auto;
+        width: 95%;
+    }
+}
+
+/* Ensure full screen usage */
+.dashboard-container {
+    width: 100vw;
+    height: 100vh;
+}
+
+.main-content {
+    width: calc(100vw - 280px);
+    height: 100vh;
+    overflow-y: auto;
+}
+
+@media (max-width: 1024px) {
+    .main-content {
+        width: 100vw;
+    }
+}
+
+/* Enhanced premium styling */
+.chart-card {
+    background: var(--card-bg);
+    backdrop-filter: blur(20px);
+    border-radius: 20px;
+    border: 1px solid var(--border-color);
+    padding: 2rem;
+    transition: all 0.3s ease;
+    box-shadow: var(--shadow);
+}
+
+.chart-card:hover {
+    box-shadow: var(--shadow-hover);
+    transform: translateY(-4px);
+}
+
+.chart-container {
+    position: relative;
+    height: 350px;
+    margin-top: 1rem;
+}
+
+.stat-card {
+    background: var(--card-bg);
+    backdrop-filter: blur(20px);
+    padding: 2rem;
+    border-radius: 20px;
+    border: 1px solid var(--border-color);
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    box-shadow: var(--shadow);
+}
+
+.stat-card:hover {
+    transform: translateY(-8px);
+    box-shadow: var(--shadow-hover);
+}
+
+/* Date Range Picker Styles */
+.date-range-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
+    z-index: 10001;
+    padding: 2rem;
+}
+
+.date-range-content {
+    background: var(--card-bg);
+    backdrop-filter: blur(20px);
+    border-radius: 20px;
+    border: 1px solid var(--border-color);
+    max-width: 400px;
+    margin: 10% auto;
+    padding: 2rem;
+}
+
+.date-range-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.date-range-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.date-range-close {
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: none;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    transition: all 0.3s ease;
+}
+
+.date-range-close:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger);
+}
+
+.date-input-group {
+    margin-bottom: 1.5rem;
+}
+
+.date-input-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.date-input-group input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    transition: all 0.3s ease;
+}
+
+.date-input-group input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
 /* Custom Scrollbar */
