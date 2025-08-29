@@ -10,17 +10,66 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 </head>
 <body data-theme="light">
-    <div class="dashboard">
+    <!-- Login Screen -->
+    <div class="login-container" id="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="login-logo">
+                    <div class="logo-icon">G4S</div>
+                    <h1>Fleet Manager</h1>
+                </div>
+                <p class="login-subtitle">Secure Fleet Management Dashboard</p>
+            </div>
+            <div class="login-form">
+                <div class="login-toggle">
+                    <button class="toggle-btn active" data-mode="client">Client Login</button>
+                    <button class="toggle-btn" data-mode="manager">Manager Login</button>
+                </div>
+                <form id="login-form">
+                    <div class="form-group">
+                        <div class="input-group">
+                            <i class="fas fa-user"></i>
+                            <input type="text" id="username" placeholder="Username" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="input-group">
+                            <i class="fas fa-lock"></i>
+                            <input type="password" id="password" placeholder="Password" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="login-btn">
+                        <span>Login</span>
+                        <i class="fas fa-arrow-right"></i>
+                    </button>
+                </form>
+                <div class="login-demo">
+                    <p>Demo Credentials:</p>
+                    <div class="demo-creds">
+                        <div><strong>Client:</strong> g4s / password</div>
+                        <div><strong>Manager:</strong> admin / admin123</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="login-bg">
+            <div class="bg-shapes">
+                <div class="shape shape-1"></div>
+                <div class="shape shape-2"></div>
+                <div class="shape shape-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="dashboard" id="dashboard" style="display: none;">
         <!-- Mobile Menu Button -->
         <button class="mobile-menu-btn" id="mobile-menu-btn">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="3" y1="6" x2="21" y2="6"></line>
-                <line x1="3" y1="12" x2="21" y2="12"></line>
-                <line x1="3" y1="18" x2="21" y2="18"></line>
-            </svg>
+            <i class="fas fa-bars"></i>
         </button>
 
         <!-- Sidebar Overlay -->
@@ -30,28 +79,55 @@
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="logo">
-                    <div class="logo-icon">G4</div>
+                    <div class="logo-icon">G4S</div>
                     <div class="logo-text">
                         <h1>Fleet Manager</h1>
                         <p id="last-updated">Real-time Dashboard</p>
                     </div>
                 </div>
+                <button class="sidebar-close" id="sidebar-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <!-- Manager Client Selector -->
+            <div class="client-selector" id="client-selector" style="display: none;">
+                <div class="selector-title">Select Client</div>
+                <select class="client-dropdown" id="client-dropdown">
+                    <option value="">All Clients</option>
+                    <option value="g4s">G4S Security</option>
+                    <option value="north">North Region</option>
+                    <option value="south">South Region</option>
+                    <option value="east">East Region</option>
+                    <option value="west">West Region</option>
+                </select>
             </div>
 
             <nav class="nav-menu">
                 <div class="nav-section">
-                    <div class="nav-section-title">Reports</div>
+                    <div class="nav-section-title">Analytics</div>
                     <div class="nav-item active" data-tab="offline">
-                        <div class="nav-icon">📊</div>
+                        <div class="nav-icon"><i class="fas fa-wifi"></i></div>
                         <div class="nav-text">Offline Reports</div>
+                        <div class="nav-badge" id="offline-badge">0</div>
                     </div>
                     <div class="nav-item" data-tab="ai-alerts">
-                        <div class="nav-icon">🚨</div>
+                        <div class="nav-icon"><i class="fas fa-exclamation-triangle"></i></div>
                         <div class="nav-text">AI Alerts</div>
+                        <div class="nav-badge" id="alerts-badge">0</div>
                     </div>
                     <div class="nav-item" data-tab="speed">
-                        <div class="nav-icon">⚡</div>
+                        <div class="nav-icon"><i class="fas fa-tachometer-alt"></i></div>
                         <div class="nav-text">Speed Violations</div>
+                        <div class="nav-badge" id="speed-badge">0</div>
+                    </div>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="nav-section-title">Management</div>
+                    <div class="nav-item" onclick="logout()">
+                        <div class="nav-icon"><i class="fas fa-sign-out-alt"></i></div>
+                        <div class="nav-text">Logout</div>
                     </div>
                 </div>
             </nav>
@@ -62,96 +138,143 @@
             <!-- Top Bar -->
             <header class="top-bar">
                 <div class="top-bar-content">
-                    <div class="search-container">
-                        <div class="search-icon">🔍</div>
-                        <input type="text" class="search-input" placeholder="Search vehicles, locations, alerts..." id="global-search">
+                    <div class="top-bar-left">
+                        <div class="search-container">
+                            <i class="fas fa-search search-icon"></i>
+                            <input type="text" class="search-input" placeholder="Search vehicles, locations, alerts..." id="global-search">
+                        </div>
                     </div>
 
-                    <div class="top-controls">
-                        <!-- Period Toggle (AI Alerts & Speed only) -->
+                    <div class="top-bar-right">
+                        <!-- Period Toggle -->
                         <div class="period-toggle" id="period-toggle">
-                            <button class="period-btn active" data-period="daily">Daily</button>
-                            <button class="period-btn" data-period="weekly">Weekly</button>
-                            <button class="period-btn" data-period="monthly">Monthly</button>
+                            <button class="period-btn active" data-period="daily">
+                                <i class="fas fa-calendar-day"></i>
+                                Daily
+                            </button>
+                            <button class="period-btn" data-period="weekly">
+                                <i class="fas fa-calendar-week"></i>
+                                Weekly
+                            </button>
+                            <button class="period-btn" data-period="monthly">
+                                <i class="fas fa-calendar-alt"></i>
+                                Monthly
+                            </button>
                         </div>
 
-                        <!-- Date Selector -->
-                        <div class="date-selector">
-                            <select class="date-input" id="date-select">
+                        <!-- Date Controls -->
+                        <div class="date-controls">
+                            <select class="date-select" id="date-select">
                                 <option value="25 August">25 August</option>
                                 <option value="24 August">24 August</option>
                                 <option value="23 August">23 August</option>
                             </select>
-                            <button class="btn btn-secondary" id="range-btn">📅 Range</button>
+                            <button class="btn btn-secondary" id="range-btn">
+                                <i class="fas fa-calendar-alt"></i>
+                                Range
+                            </button>
                         </div>
 
-                        <!-- Theme Toggle -->
-                        <button class="theme-toggle" id="theme-toggle">🌙</button>
-
                         <!-- Actions -->
-                        <button class="btn btn-secondary" id="refresh-btn">🔄 Refresh</button>
-                        <button class="btn btn-primary" id="export-btn">📥 Export</button>
+                        <div class="action-buttons">
+                            <button class="btn btn-secondary" id="refresh-btn">
+                                <i class="fas fa-sync-alt"></i>
+                                <span class="btn-text">Refresh</span>
+                            </button>
+                            <button class="btn btn-primary" id="export-btn">
+                                <i class="fas fa-download"></i>
+                                <span class="btn-text">Export</span>
+                            </button>
+                            <button class="theme-toggle" id="theme-toggle">
+                                <i class="fas fa-moon"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </header>
+
+            <!-- User Info -->
+            <div class="user-info" id="user-info">
+                <div class="user-details">
+                    <span class="user-role" id="user-role">Client</span>
+                    <span class="user-name" id="user-name">G4S Security</span>
+                </div>
+                <div class="last-sync">
+                    <i class="fas fa-sync-alt"></i>
+                    <span id="last-sync-time">Just now</span>
+                </div>
+            </div>
 
             <!-- Content -->
             <div class="content">
                 <!-- Offline Reports Tab -->
                 <div class="tab-content active" id="offline">
                     <div class="stats-grid">
-                        <div class="stat-card">
+                        <div class="stat-card gradient-1">
+                            <div class="stat-icon">
+                                <i class="fas fa-wifi"></i>
+                            </div>
                             <div class="stat-content">
-                                <div class="stat-header">
-                                    <div class="stat-title">Total Offline</div>
-                                    <div class="stat-icon danger">📵</div>
-                                </div>
                                 <div class="stat-value" id="total-offline">0</div>
-                                <div class="stat-change">↑ 2 from yesterday</div>
+                                <div class="stat-title">Total Offline</div>
+                                <div class="stat-change positive">
+                                    <i class="fas fa-arrow-up"></i>
+                                    <span>2 from yesterday</span>
+                                </div>
                             </div>
                         </div>
                         
-                        <div class="stat-card">
+                        <div class="stat-card gradient-2">
+                            <div class="stat-icon">
+                                <i class="fas fa-clock"></i>
+                            </div>
                             <div class="stat-content">
-                                <div class="stat-header">
-                                    <div class="stat-title">Avg Hours</div>
-                                    <div class="stat-icon warning">⏰</div>
-                                </div>
                                 <div class="stat-value" id="avg-offline">0</div>
-                                <div class="stat-change">↓ 5h improvement</div>
+                                <div class="stat-title">Avg Hours</div>
+                                <div class="stat-change negative">
+                                    <i class="fas fa-arrow-down"></i>
+                                    <span>5h improvement</span>
+                                </div>
                             </div>
                         </div>
                         
-                        <div class="stat-card">
+                        <div class="stat-card gradient-3">
+                            <div class="stat-icon">
+                                <i class="fas fa-exclamation-triangle"></i>
+                            </div>
                             <div class="stat-content">
-                                <div class="stat-header">
-                                    <div class="stat-title">Critical</div>
-                                    <div class="stat-icon danger">🚨</div>
-                                </div>
                                 <div class="stat-value" id="critical-issues">0</div>
-                                <div class="stat-change">↑ 1 needs attention</div>
+                                <div class="stat-title">Critical</div>
+                                <div class="stat-change positive">
+                                    <i class="fas fa-arrow-up"></i>
+                                    <span>1 needs attention</span>
+                                </div>
                             </div>
                         </div>
                         
-                        <div class="stat-card">
+                        <div class="stat-card gradient-4">
+                            <div class="stat-icon">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
                             <div class="stat-content">
-                                <div class="stat-header">
-                                    <div class="stat-title">Resolution</div>
-                                    <div class="stat-icon success">✅</div>
-                                </div>
                                 <div class="stat-value">87%</div>
-                                <div class="stat-change">↑ 12% this week</div>
+                                <div class="stat-title">Resolution</div>
+                                <div class="stat-change positive">
+                                    <i class="fas fa-arrow-up"></i>
+                                    <span>12% this week</span>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="charts-grid">
+                    <div class="charts-section">
                         <div class="chart-card">
                             <div class="chart-header">
-                                <div>
-                                    <div class="chart-title">Status Distribution</div>
-                                    <div class="chart-subtitle">Current vehicle status breakdown</div>
+                                <div class="chart-title">
+                                    <i class="fas fa-chart-pie"></i>
+                                    Status Distribution
                                 </div>
+                                <div class="chart-subtitle">Current vehicle status breakdown</div>
                             </div>
                             <div class="chart-container">
                                 <canvas id="status-pie-chart"></canvas>
@@ -160,10 +283,11 @@
                         
                         <div class="chart-card">
                             <div class="chart-header">
-                                <div>
-                                    <div class="chart-title">Regional Overview</div>
-                                    <div class="chart-subtitle">Offline vehicles by region</div>
+                                <div class="chart-title">
+                                    <i class="fas fa-chart-bar"></i>
+                                    Regional Overview
                                 </div>
+                                <div class="chart-subtitle">Offline vehicles by region</div>
                             </div>
                             <div class="chart-container">
                                 <canvas id="region-bar-chart"></canvas>
@@ -171,98 +295,116 @@
                         </div>
                     </div>
 
-                    <div class="table-card">
-                        <div class="table-header">
-                            <div class="table-title">Offline Vehicles Details</div>
-                            <div class="table-filters">
-                                <select class="filter-select" id="region-filter">
-                                    <option value="">All Regions</option>
-                                    <option value="HR">Haryana</option>
-                                    <option value="AP">Andhra Pradesh</option>
-                                    <option value="TS">Telangana</option>
-                                </select>
-                                <select class="filter-select" id="status-filter">
-                                    <option value="">All Status</option>
-                                    <option value="offline">Offline</option>
-                                    <option value="parking">Parking</option>
-                                    <option value="technical">Technical</option>
-                                </select>
+                    <div class="table-section">
+                        <div class="table-card">
+                            <div class="table-header">
+                                <div class="table-title">
+                                    <i class="fas fa-table"></i>
+                                    Offline Vehicles Details
+                                </div>
+                                <div class="table-filters">
+                                    <select class="filter-select" id="region-filter">
+                                        <option value="">All Regions</option>
+                                        <option value="HR">Haryana</option>
+                                        <option value="AP">Andhra Pradesh</option>
+                                        <option value="TS">Telangana</option>
+                                    </select>
+                                    <select class="filter-select" id="status-filter">
+                                        <option value="">All Status</option>
+                                        <option value="offline">Offline</option>
+                                        <option value="parking">Parking</option>
+                                        <option value="technical">Technical</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="table-wrapper">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Vehicle Number</th>
+                                            <th>Client</th>
+                                            <th>Last Online</th>
+                                            <th>Offline Hours</th>
+                                            <th>Status</th>
+                                            <th>Remarks</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="offline-table-body">
+                                        <!-- Data populated by JavaScript -->
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
-                        
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Vehicle Number</th>
-                                    <th>Last Online</th>
-                                    <th>Offline Hours</th>
-                                    <th>Status</th>
-                                    <th>Remarks</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="offline-table-body">
-                                <!-- Data populated by JavaScript -->
-                            </tbody>
-                        </table>
                     </div>
                 </div>
 
                 <!-- AI Alerts Tab -->
                 <div class="tab-content" id="ai-alerts">
                     <div class="stats-grid">
-                        <div class="stat-card">
+                        <div class="stat-card gradient-warning">
+                            <div class="stat-icon">
+                                <i class="fas fa-exclamation-triangle"></i>
+                            </div>
                             <div class="stat-content">
-                                <div class="stat-header">
-                                    <div class="stat-title">Total Alerts</div>
-                                    <div class="stat-icon warning">🚨</div>
-                                </div>
                                 <div class="stat-value" id="total-alerts">0</div>
-                                <div class="stat-change">↓ 15 from yesterday</div>
+                                <div class="stat-title">Total Alerts</div>
+                                <div class="stat-change negative">
+                                    <i class="fas fa-arrow-down"></i>
+                                    <span>15 from yesterday</span>
+                                </div>
                             </div>
                         </div>
                         
-                        <div class="stat-card">
+                        <div class="stat-card gradient-info">
+                            <div class="stat-icon">
+                                <i class="fas fa-truck"></i>
+                            </div>
                             <div class="stat-content">
-                                <div class="stat-header">
-                                    <div class="stat-title">Vehicles</div>
-                                    <div class="stat-icon info">🚛</div>
-                                </div>
                                 <div class="stat-value" id="unique-vehicles">0</div>
-                                <div class="stat-change">Active vehicles with alerts</div>
+                                <div class="stat-title">Vehicles</div>
+                                <div class="stat-change neutral">
+                                    <span>Active vehicles with alerts</span>
+                                </div>
                             </div>
                         </div>
                         
-                        <div class="stat-card">
+                        <div class="stat-card gradient-danger">
+                            <div class="stat-icon">
+                                <i class="fas fa-crown"></i>
+                            </div>
                             <div class="stat-content">
-                                <div class="stat-header">
-                                    <div class="stat-title">Top Violator</div>
-                                    <div class="stat-icon danger">⚠️</div>
-                                </div>
                                 <div class="stat-value" id="top-violator">-</div>
-                                <div class="stat-change">Highest alert count</div>
+                                <div class="stat-title">Top Violator</div>
+                                <div class="stat-change neutral">
+                                    <span>Highest alert count</span>
+                                </div>
                             </div>
                         </div>
                         
-                        <div class="stat-card">
+                        <div class="stat-card gradient-success">
+                            <div class="stat-icon">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
                             <div class="stat-content">
-                                <div class="stat-header">
-                                    <div class="stat-title">Alert Rate</div>
-                                    <div class="stat-icon info">📈</div>
-                                </div>
                                 <div class="stat-value" id="alert-rate">0</div>
-                                <div class="stat-change">per hour average</div>
+                                <div class="stat-title">Alert Rate</div>
+                                <div class="stat-change neutral">
+                                    <span>per hour average</span>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="charts-grid">
+                    <div class="charts-section">
                         <div class="chart-card">
                             <div class="chart-header">
-                                <div>
-                                    <div class="chart-title">Vehicle Alert Distribution</div>
-                                    <div class="chart-subtitle">Alerts per vehicle</div>
+                                <div class="chart-title">
+                                    <i class="fas fa-chart-bar"></i>
+                                    Vehicle Alert Distribution
                                 </div>
+                                <div class="chart-subtitle">Alerts per vehicle</div>
                             </div>
                             <div class="chart-container">
                                 <canvas id="vehicle-alerts-chart"></canvas>
@@ -271,22 +413,24 @@
                         
                         <div class="chart-card">
                             <div class="chart-header">
-                                <div>
-                                    <div class="chart-title">Alert Type Breakdown</div>
-                                    <div class="chart-subtitle">Distribution by alert category</div>
+                                <div class="chart-title">
+                                    <i class="fas fa-chart-pie"></i>
+                                    Alert Type Breakdown
                                 </div>
+                                <div class="chart-subtitle">Distribution by alert category</div>
                             </div>
                             <div class="chart-container">
                                 <canvas id="alert-type-chart"></canvas>
                             </div>
                         </div>
                         
-                        <div class="chart-card">
+                        <div class="chart-card chart-full">
                             <div class="chart-header">
-                                <div>
-                                    <div class="chart-title">Alert Trend Analysis</div>
-                                    <div class="chart-subtitle">Hourly/daily alert patterns</div>
+                                <div class="chart-title">
+                                    <i class="fas fa-chart-line"></i>
+                                    Alert Trend Analysis
                                 </div>
+                                <div class="chart-subtitle">Hourly/daily alert patterns</div>
                             </div>
                             <div class="chart-container">
                                 <canvas id="alert-trend-chart"></canvas>
@@ -294,91 +438,108 @@
                         </div>
                     </div>
 
-                    <div class="table-card">
-                        <div class="table-header">
-                            <div class="table-title">AI Alert Details</div>
-                            <div class="table-filters">
-                                <select class="filter-select" id="alert-type-filter">
-                                    <option value="">All Alert Types</option>
-                                    <option value="distracted">Distracted Driving</option>
-                                    <option value="seatbelt">Unfastened Seatbelt</option>
-                                    <option value="call">Call Alarm</option>
-                                </select>
+                    <div class="table-section">
+                        <div class="table-card">
+                            <div class="table-header">
+                                <div class="table-title">
+                                    <i class="fas fa-bell"></i>
+                                    AI Alert Details
+                                </div>
+                                <div class="table-filters">
+                                    <select class="filter-select" id="alert-type-filter">
+                                        <option value="">All Alert Types</option>
+                                        <option value="distracted">Distracted Driving</option>
+                                        <option value="seatbelt">Unfastened Seatbelt</option>
+                                        <option value="call">Call Alarm</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="table-wrapper">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Vehicle</th>
+                                            <th>Company</th>
+                                            <th>Alert Type</th>
+                                            <th>Time</th>
+                                            <th>Evidence</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="alerts-table-body">
+                                        <!-- Data populated by JavaScript -->
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
-                        
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Vehicle</th>
-                                    <th>Company</th>
-                                    <th>Alert Type</th>
-                                    <th>Time</th>
-                                    <th>Evidence</th>
-                                </tr>
-                            </thead>
-                            <tbody id="alerts-table-body">
-                                <!-- Data populated by JavaScript -->
-                            </tbody>
-                        </table>
                     </div>
                 </div>
 
                 <!-- Speed Violations Tab -->
                 <div class="tab-content" id="speed">
                     <div class="stats-grid">
-                        <div class="stat-card">
+                        <div class="stat-card gradient-danger">
+                            <div class="stat-icon">
+                                <i class="fas fa-exclamation-triangle"></i>
+                            </div>
                             <div class="stat-content">
-                                <div class="stat-header">
-                                    <div class="stat-title">Violations</div>
-                                    <div class="stat-icon danger">🚨</div>
-                                </div>
                                 <div class="stat-value" id="total-violations">0</div>
-                                <div class="stat-change">↓ 8 from yesterday</div>
+                                <div class="stat-title">Violations</div>
+                                <div class="stat-change negative">
+                                    <i class="fas fa-arrow-down"></i>
+                                    <span>8 from yesterday</span>
+                                </div>
                             </div>
                         </div>
                         
-                        <div class="stat-card">
+                        <div class="stat-card gradient-warning">
+                            <div class="stat-icon">
+                                <i class="fas fa-exclamation"></i>
+                            </div>
                             <div class="stat-content">
-                                <div class="stat-header">
-                                    <div class="stat-title">Warnings</div>
-                                    <div class="stat-icon warning">⚠️</div>
-                                </div>
                                 <div class="stat-value" id="warning-count">0</div>
-                                <div class="stat-change">75-89 km/h range</div>
+                                <div class="stat-title">Warnings</div>
+                                <div class="stat-change neutral">
+                                    <span>75-89 km/h range</span>
+                                </div>
                             </div>
                         </div>
                         
-                        <div class="stat-card">
+                        <div class="stat-card gradient-danger-alt">
+                            <div class="stat-icon">
+                                <i class="fas fa-bell"></i>
+                            </div>
                             <div class="stat-content">
-                                <div class="stat-header">
-                                    <div class="stat-title">Alarms</div>
-                                    <div class="stat-icon danger">🚨</div>
-                                </div>
                                 <div class="stat-value" id="alarm-count">0</div>
-                                <div class="stat-change">90+ km/h critical</div>
+                                <div class="stat-title">Alarms</div>
+                                <div class="stat-change neutral">
+                                    <span>90+ km/h critical</span>
+                                </div>
                             </div>
                         </div>
                         
-                        <div class="stat-card">
+                        <div class="stat-card gradient-speed">
+                            <div class="stat-icon">
+                                <i class="fas fa-tachometer-alt"></i>
+                            </div>
                             <div class="stat-content">
-                                <div class="stat-header">
-                                    <div class="stat-title">Max Speed</div>
-                                    <div class="stat-icon danger">📈</div>
-                                </div>
                                 <div class="stat-value" id="max-speed">0</div>
-                                <div class="stat-change">highest recorded today</div>
+                                <div class="stat-title">Max Speed</div>
+                                <div class="stat-change neutral">
+                                    <span>highest recorded today</span>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="charts-grid">
+                    <div class="charts-section">
                         <div class="chart-card">
                             <div class="chart-header">
-                                <div>
-                                    <div class="chart-title">Speed Violations by Vehicle</div>
-                                    <div class="chart-subtitle">Top violating vehicles</div>
+                                <div class="chart-title">
+                                    <i class="fas fa-chart-bar"></i>
+                                    Speed Violations by Vehicle
                                 </div>
+                                <div class="chart-subtitle">Top violating vehicles</div>
                             </div>
                             <div class="chart-container">
                                 <canvas id="speed-violations-chart"></canvas>
@@ -387,22 +548,24 @@
                         
                         <div class="chart-card">
                             <div class="chart-header">
-                                <div>
-                                    <div class="chart-title">Warning vs Alarm</div>
-                                    <div class="chart-subtitle">Severity distribution</div>
+                                <div class="chart-title">
+                                    <i class="fas fa-chart-pie"></i>
+                                    Warning vs Alarm
                                 </div>
+                                <div class="chart-subtitle">Severity distribution</div>
                             </div>
                             <div class="chart-container">
                                 <canvas id="speed-category-chart"></canvas>
                             </div>
                         </div>
                         
-                        <div class="chart-card">
+                        <div class="chart-card chart-full">
                             <div class="chart-header">
-                                <div>
-                                    <div class="chart-title">Speed Trend Analysis</div>
-                                    <div class="chart-subtitle">Hourly speed violation patterns</div>
+                                <div class="chart-title">
+                                    <i class="fas fa-chart-line"></i>
+                                    Speed Trend Analysis
                                 </div>
+                                <div class="chart-subtitle">Hourly speed violation patterns</div>
                             </div>
                             <div class="chart-container">
                                 <canvas id="speed-trend-chart"></canvas>
@@ -410,33 +573,40 @@
                         </div>
                     </div>
 
-                    <div class="table-card">
-                        <div class="table-header">
-                            <div class="table-title">Speed Violation Details</div>
-                            <div class="table-filters">
-                                <select class="filter-select" id="speed-filter">
-                                    <option value="">All Speeds</option>
-                                    <option value="warning">Warnings (75-89)</option>
-                                    <option value="alarm">Alarms (90+)</option>
-                                </select>
+                    <div class="table-section">
+                        <div class="table-card">
+                            <div class="table-header">
+                                <div class="table-title">
+                                    <i class="fas fa-tachometer-alt"></i>
+                                    Speed Violation Details
+                                </div>
+                                <div class="table-filters">
+                                    <select class="filter-select" id="speed-filter">
+                                        <option value="">All Speeds</option>
+                                        <option value="warning">Warnings (75-89)</option>
+                                        <option value="alarm">Alarms (90+)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="table-wrapper">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Vehicle</th>
+                                            <th>Company</th>
+                                            <th>Max Speed</th>
+                                            <th>Warnings</th>
+                                            <th>Alarms</th>
+                                            <th>Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="speed-table-body">
+                                        <!-- Data populated by JavaScript -->
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
-                        
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>Vehicle</th>
-                                    <th>Company</th>
-                                    <th>Max Speed</th>
-                                    <th>Warnings</th>
-                                    <th>Alarms</th>
-                                    <th>Total</th>
-                                </tr>
-                            </thead>
-                            <tbody id="speed-table-body">
-                                <!-- Data populated by JavaScript -->
-                            </tbody>
-                        </table>
                     </div>
                 </div>
             </div>
@@ -447,8 +617,13 @@
     <div class="modal" id="status-modal">
         <div class="modal-content">
             <div class="modal-header">
-                <div class="modal-title">Update Vehicle Status</div>
-                <button class="modal-close" id="modal-close">✕</button>
+                <div class="modal-title">
+                    <i class="fas fa-edit"></i>
+                    Update Vehicle Status
+                </div>
+                <button class="modal-close" id="modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
             <div class="modal-body">
                 <div class="form-group">
@@ -480,17 +655,24 @@
     <div class="modal" id="range-modal">
         <div class="modal-content">
             <div class="modal-header">
-                <div class="modal-title">Select Date Range</div>
-                <button class="modal-close" id="range-close">✕</button>
+                <div class="modal-title">
+                    <i class="fas fa-calendar-alt"></i>
+                    Select Date Range
+                </div>
+                <button class="modal-close" id="range-close">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
             <div class="modal-body">
-                <div class="form-group">
-                    <label class="form-label">From Date</label>
-                    <input type="date" class="form-input" id="from-date">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">To Date</label>
-                    <input type="date" class="form-input" id="to-date">
+                <div class="date-range-picker">
+                    <div class="form-group">
+                        <label class="form-label">From Date</label>
+                        <input type="date" class="form-input" id="from-date">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">To Date</label>
+                        <input type="date" class="form-input" id="to-date">
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -502,8 +684,10 @@
 
     <!-- Loading -->
     <div class="loading" id="loading">
-        <div class="spinner"></div>
-        <div class="loading-text">Loading fleet data...</div>
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <div class="loading-text">Loading fleet data...</div>
+        </div>
     </div>
 
     <script src="app.js"></script>
