@@ -10,144 +10,147 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
-<body>
-    <div class="dashboard-container">
-        <!-- Sidebar Navigation -->
+<body data-theme="light">
+    <div class="dashboard">
+        <!-- Mobile Menu Button -->
+        <button class="mobile-menu-btn" id="mobile-menu-btn">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+        </button>
+
+        <!-- Sidebar Overlay -->
+        <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+        <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
-            <div class="logo-section">
-                <h1>G4S Fleet</h1>
-                <p>Management Dashboard</p>
+            <div class="sidebar-header">
+                <div class="logo">
+                    <div class="logo-icon">G4</div>
+                    <div class="logo-text">
+                        <h1>Fleet Manager</h1>
+                        <p id="last-updated">Real-time Dashboard</p>
+                    </div>
+                </div>
             </div>
-            
+
             <nav class="nav-menu">
-                <div class="nav-item active" data-tab="offline">
-                    <span class="nav-icon">📊</span>
-                    <span class="nav-text">Offline Reports</span>
-                </div>
-                <div class="nav-item" data-tab="ai-alerts">
-                    <span class="nav-icon">🚨</span>
-                    <span class="nav-text">AI Alerts</span>
-                </div>
-                <div class="nav-item" data-tab="speed">
-                    <span class="nav-icon">⚡</span>
-                    <span class="nav-text">Speed Violations</span>
+                <div class="nav-section">
+                    <div class="nav-section-title">Reports</div>
+                    <div class="nav-item active" data-tab="offline">
+                        <div class="nav-icon">📊</div>
+                        <div class="nav-text">Offline Reports</div>
+                    </div>
+                    <div class="nav-item" data-tab="ai-alerts">
+                        <div class="nav-icon">🚨</div>
+                        <div class="nav-text">AI Alerts</div>
+                    </div>
+                    <div class="nav-item" data-tab="speed">
+                        <div class="nav-icon">⚡</div>
+                        <div class="nav-text">Speed Violations</div>
+                    </div>
                 </div>
             </nav>
         </aside>
 
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Top Header -->
-            <header class="top-header">
-                <div class="header-left">
+            <!-- Top Bar -->
+            <header class="top-bar">
+                <div class="top-bar-content">
                     <div class="search-container">
-                        <span class="search-icon">🔍</span>
-                        <input type="text" class="search-input" placeholder="Search vehicles, locations, drivers..." id="global-search">
+                        <div class="search-icon">🔍</div>
+                        <input type="text" class="search-input" placeholder="Search vehicles, locations, alerts..." id="global-search">
                     </div>
-                </div>
-                
-                <div class="header-controls">
-                    <!-- Report Toggle (Only for AI Alerts & Speed) -->
-                    <div class="report-toggle" id="report-toggle" style="display: none;">
-                        <button class="toggle-btn active" data-period="daily">Daily</button>
-                        <button class="toggle-btn" data-period="weekly">Weekly</button>
-                        <button class="toggle-btn" data-period="monthly">Monthly</button>
-                    </div>
-                    
-                    <!-- Date Selector with Range Picker -->
-                    <div class="date-selector">
-                        <select class="date-input" id="date-select">
-                            <option value="25 August">25 August</option>
-                            <option value="24 August">24 August</option>
-                            <option value="23 August">23 August</option>
-                        </select>
-                        <button class="btn btn-secondary" id="date-range-btn">
-                            <span>📅</span> Range
-                        </button>
-                    </div>
-                    
-                    <!-- Theme Toggle -->
-                    <button class="theme-toggle" id="theme-toggle">🌙</button>
-                    
-                    <!-- Action Buttons -->
-                    <div class="action-buttons">
-                        <button class="btn btn-secondary" id="refresh-btn">
-                            <span>🔄</span> Refresh
-                        </button>
-                        <button class="btn btn-primary" id="export-btn">
-                            <span>📥</span> Export PDF
-                        </button>
+
+                    <div class="top-controls">
+                        <!-- Period Toggle (AI Alerts & Speed only) -->
+                        <div class="period-toggle" id="period-toggle">
+                            <button class="period-btn active" data-period="daily">Daily</button>
+                            <button class="period-btn" data-period="weekly">Weekly</button>
+                            <button class="period-btn" data-period="monthly">Monthly</button>
+                        </div>
+
+                        <!-- Date Selector -->
+                        <div class="date-selector">
+                            <select class="date-input" id="date-select">
+                                <option value="25 August">25 August</option>
+                                <option value="24 August">24 August</option>
+                                <option value="23 August">23 August</option>
+                            </select>
+                            <button class="btn btn-secondary" id="range-btn">📅 Range</button>
+                        </div>
+
+                        <!-- Theme Toggle -->
+                        <button class="theme-toggle" id="theme-toggle">🌙</button>
+
+                        <!-- Actions -->
+                        <button class="btn btn-secondary" id="refresh-btn">🔄 Refresh</button>
+                        <button class="btn btn-primary" id="export-btn">📥 Export</button>
                     </div>
                 </div>
             </header>
 
-            <!-- Content Area -->
-            <div class="content-area">
+            <!-- Content -->
+            <div class="content">
                 <!-- Offline Reports Tab -->
-                <div id="offline" class="tab-pane active">
+                <div class="tab-content active" id="offline">
                     <div class="stats-grid">
                         <div class="stat-card">
-                            <div class="stat-card-content">
+                            <div class="stat-content">
                                 <div class="stat-header">
                                     <div class="stat-title">Total Offline</div>
-                                    <div class="stat-icon danger">🔴</div>
+                                    <div class="stat-icon danger">📵</div>
                                 </div>
                                 <div class="stat-value" id="total-offline">0</div>
-                                <div class="stat-change">
-                                    <span>↑ 2</span> from yesterday
-                                </div>
+                                <div class="stat-change">↑ 2 from yesterday</div>
                             </div>
                         </div>
                         
                         <div class="stat-card">
-                            <div class="stat-card-content">
+                            <div class="stat-content">
                                 <div class="stat-header">
-                                    <div class="stat-title">Avg Offline Hours</div>
+                                    <div class="stat-title">Avg Hours</div>
                                     <div class="stat-icon warning">⏰</div>
                                 </div>
                                 <div class="stat-value" id="avg-offline">0</div>
-                                <div class="stat-change">
-                                    <span>↓ 5h</span> improvement
-                                </div>
+                                <div class="stat-change">↓ 5h improvement</div>
                             </div>
                         </div>
                         
                         <div class="stat-card">
-                            <div class="stat-card-content">
+                            <div class="stat-content">
                                 <div class="stat-header">
-                                    <div class="stat-title">Critical Issues</div>
+                                    <div class="stat-title">Critical</div>
                                     <div class="stat-icon danger">🚨</div>
                                 </div>
                                 <div class="stat-value" id="critical-issues">0</div>
-                                <div class="stat-change">
-                                    <span>↑ 1</span> needs attention
-                                </div>
+                                <div class="stat-change">↑ 1 needs attention</div>
                             </div>
                         </div>
                         
                         <div class="stat-card">
-                            <div class="stat-card-content">
+                            <div class="stat-content">
                                 <div class="stat-header">
-                                    <div class="stat-title">Resolution Rate</div>
+                                    <div class="stat-title">Resolution</div>
                                     <div class="stat-icon success">✅</div>
                                 </div>
                                 <div class="stat-value">87%</div>
-                                <div class="stat-change">
-                                    <span>↑ 12%</span> this week
-                                </div>
+                                <div class="stat-change">↑ 12% this week</div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="charts-section">
+                    <div class="charts-grid">
                         <div class="chart-card">
                             <div class="chart-header">
-                                <div class="chart-title">Status Distribution</div>
-                                <div class="chart-options">
-                                    <div class="chart-option"></div>
-                                    <div class="chart-option"></div>
-                                    <div class="chart-option"></div>
+                                <div>
+                                    <div class="chart-title">Status Distribution</div>
+                                    <div class="chart-subtitle">Current vehicle status breakdown</div>
                                 </div>
                             </div>
                             <div class="chart-container">
@@ -157,11 +160,9 @@
                         
                         <div class="chart-card">
                             <div class="chart-header">
-                                <div class="chart-title">Regional Overview</div>
-                                <div class="chart-options">
-                                    <div class="chart-option"></div>
-                                    <div class="chart-option"></div>
-                                    <div class="chart-option"></div>
+                                <div>
+                                    <div class="chart-title">Regional Overview</div>
+                                    <div class="chart-subtitle">Offline vehicles by region</div>
                                 </div>
                             </div>
                             <div class="chart-container">
@@ -172,7 +173,7 @@
 
                     <div class="table-card">
                         <div class="table-header">
-                            <div class="table-title">Offline Vehicles</div>
+                            <div class="table-title">Offline Vehicles Details</div>
                             <div class="table-filters">
                                 <select class="filter-select" id="region-filter">
                                     <option value="">All Regions</option>
@@ -195,82 +196,72 @@
                                     <th>Vehicle Number</th>
                                     <th>Last Online</th>
                                     <th>Offline Hours</th>
-                                    <th>Current Status</th>
+                                    <th>Status</th>
                                     <th>Remarks</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="offline-table-body">
-                                <!-- Data will be populated here -->
+                                <!-- Data populated by JavaScript -->
                             </tbody>
                         </table>
                     </div>
                 </div>
 
                 <!-- AI Alerts Tab -->
-                <div id="ai-alerts" class="tab-pane">
+                <div class="tab-content" id="ai-alerts">
                     <div class="stats-grid">
                         <div class="stat-card">
-                            <div class="stat-card-content">
+                            <div class="stat-content">
                                 <div class="stat-header">
                                     <div class="stat-title">Total Alerts</div>
                                     <div class="stat-icon warning">🚨</div>
                                 </div>
                                 <div class="stat-value" id="total-alerts">0</div>
-                                <div class="stat-change">
-                                    <span>↓ 15</span> from yesterday
-                                </div>
+                                <div class="stat-change">↓ 15 from yesterday</div>
                             </div>
                         </div>
                         
                         <div class="stat-card">
-                            <div class="stat-card-content">
+                            <div class="stat-content">
                                 <div class="stat-header">
-                                    <div class="stat-title">Unique Vehicles</div>
+                                    <div class="stat-title">Vehicles</div>
                                     <div class="stat-icon info">🚛</div>
                                 </div>
                                 <div class="stat-value" id="unique-vehicles">0</div>
-                                <div class="stat-change">
-                                    <span>→ 0</span> no change
-                                </div>
+                                <div class="stat-change">Active vehicles with alerts</div>
                             </div>
                         </div>
                         
                         <div class="stat-card">
-                            <div class="stat-card-content">
+                            <div class="stat-content">
                                 <div class="stat-header">
                                     <div class="stat-title">Top Violator</div>
                                     <div class="stat-icon danger">⚠️</div>
                                 </div>
                                 <div class="stat-value" id="top-violator">-</div>
-                                <div class="stat-change">
-                                    <span id="violator-count">0 alerts</span>
-                                </div>
+                                <div class="stat-change">Highest alert count</div>
                             </div>
                         </div>
                         
                         <div class="stat-card">
-                            <div class="stat-card-content">
+                            <div class="stat-content">
                                 <div class="stat-header">
                                     <div class="stat-title">Alert Rate</div>
-                                    <div class="stat-icon warning">📈</div>
+                                    <div class="stat-icon info">📈</div>
                                 </div>
                                 <div class="stat-value" id="alert-rate">0</div>
-                                <div class="stat-change">
-                                    <span>per hour avg</span>
-                                </div>
+                                <div class="stat-change">per hour average</div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="charts-section">
+                    <div class="charts-grid">
                         <div class="chart-card">
                             <div class="chart-header">
-                                <div class="chart-title">Vehicle Alert Distribution</div>
-                                <div class="chart-options">
-                                    <div class="chart-option"></div>
-                                    <div class="chart-option"></div>
-                                    <div class="chart-option"></div>
+                                <div>
+                                    <div class="chart-title">Vehicle Alert Distribution</div>
+                                    <div class="chart-subtitle">Alerts per vehicle</div>
                                 </div>
                             </div>
                             <div class="chart-container">
@@ -280,11 +271,9 @@
                         
                         <div class="chart-card">
                             <div class="chart-header">
-                                <div class="chart-title">Alert Type Breakdown</div>
-                                <div class="chart-options">
-                                    <div class="chart-option"></div>
-                                    <div class="chart-option"></div>
-                                    <div class="chart-option"></div>
+                                <div>
+                                    <div class="chart-title">Alert Type Breakdown</div>
+                                    <div class="chart-subtitle">Distribution by alert category</div>
                                 </div>
                             </div>
                             <div class="chart-container">
@@ -294,11 +283,9 @@
                         
                         <div class="chart-card">
                             <div class="chart-header">
-                                <div class="chart-title">Alert Trend Analysis</div>
-                                <div class="chart-options">
-                                    <div class="chart-option"></div>
-                                    <div class="chart-option"></div>
-                                    <div class="chart-option"></div>
+                                <div>
+                                    <div class="chart-title">Alert Trend Analysis</div>
+                                    <div class="chart-subtitle">Hourly/daily alert patterns</div>
                                 </div>
                             </div>
                             <div class="chart-container">
@@ -331,76 +318,66 @@
                                 </tr>
                             </thead>
                             <tbody id="alerts-table-body">
-                                <!-- Data will be populated here -->
+                                <!-- Data populated by JavaScript -->
                             </tbody>
                         </table>
                     </div>
                 </div>
 
                 <!-- Speed Violations Tab -->
-                <div id="speed" class="tab-pane">
+                <div class="tab-content" id="speed">
                     <div class="stats-grid">
                         <div class="stat-card">
-                            <div class="stat-card-content">
+                            <div class="stat-content">
                                 <div class="stat-header">
-                                    <div class="stat-title">Total Violations</div>
+                                    <div class="stat-title">Violations</div>
                                     <div class="stat-icon danger">🚨</div>
                                 </div>
                                 <div class="stat-value" id="total-violations">0</div>
-                                <div class="stat-change">
-                                    <span>↓ 8</span> from yesterday
-                                </div>
+                                <div class="stat-change">↓ 8 from yesterday</div>
                             </div>
                         </div>
                         
                         <div class="stat-card">
-                            <div class="stat-card-content">
+                            <div class="stat-content">
                                 <div class="stat-header">
                                     <div class="stat-title">Warnings</div>
                                     <div class="stat-icon warning">⚠️</div>
                                 </div>
                                 <div class="stat-value" id="warning-count">0</div>
-                                <div class="stat-change">
-                                    <span>75-89 km/h</span>
-                                </div>
+                                <div class="stat-change">75-89 km/h range</div>
                             </div>
                         </div>
                         
                         <div class="stat-card">
-                            <div class="stat-card-content">
+                            <div class="stat-content">
                                 <div class="stat-header">
-                                    <div class="stat-title">Critical Alarms</div>
+                                    <div class="stat-title">Alarms</div>
                                     <div class="stat-icon danger">🚨</div>
                                 </div>
                                 <div class="stat-value" id="alarm-count">0</div>
-                                <div class="stat-change">
-                                    <span>90+ km/h</span>
-                                </div>
+                                <div class="stat-change">90+ km/h critical</div>
                             </div>
                         </div>
                         
                         <div class="stat-card">
-                            <div class="stat-card-content">
+                            <div class="stat-content">
                                 <div class="stat-header">
                                     <div class="stat-title">Max Speed</div>
                                     <div class="stat-icon danger">📈</div>
                                 </div>
                                 <div class="stat-value" id="max-speed">0</div>
-                                <div class="stat-change">
-                                    <span>highest today</span>
-                                </div>
+                                <div class="stat-change">highest recorded today</div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="charts-section">
+                    <div class="charts-grid">
                         <div class="chart-card">
                             <div class="chart-header">
-                                <div class="chart-title">Speed Violations by Vehicle</div>
-                                <div class="chart-options">
-                                    <div class="chart-option"></div>
-                                    <div class="chart-option"></div>
-                                    <div class="chart-option"></div>
+                                <div>
+                                    <div class="chart-title">Speed Violations by Vehicle</div>
+                                    <div class="chart-subtitle">Top violating vehicles</div>
                                 </div>
                             </div>
                             <div class="chart-container">
@@ -410,11 +387,9 @@
                         
                         <div class="chart-card">
                             <div class="chart-header">
-                                <div class="chart-title">Warning vs Alarm Distribution</div>
-                                <div class="chart-options">
-                                    <div class="chart-option"></div>
-                                    <div class="chart-option"></div>
-                                    <div class="chart-option"></div>
+                                <div>
+                                    <div class="chart-title">Warning vs Alarm</div>
+                                    <div class="chart-subtitle">Severity distribution</div>
                                 </div>
                             </div>
                             <div class="chart-container">
@@ -424,11 +399,9 @@
                         
                         <div class="chart-card">
                             <div class="chart-header">
-                                <div class="chart-title">Speed Trend Analysis</div>
-                                <div class="chart-options">
-                                    <div class="chart-option"></div>
-                                    <div class="chart-option"></div>
-                                    <div class="chart-option"></div>
+                                <div>
+                                    <div class="chart-title">Speed Trend Analysis</div>
+                                    <div class="chart-subtitle">Hourly speed violation patterns</div>
                                 </div>
                             </div>
                             <div class="chart-container">
@@ -461,7 +434,7 @@
                                 </tr>
                             </thead>
                             <tbody id="speed-table-body">
-                                <!-- Data will be populated here -->
+                                <!-- Data populated by JavaScript -->
                             </tbody>
                         </table>
                     </div>
@@ -470,8 +443,8 @@
         </main>
     </div>
 
-    <!-- Edit Status Modal -->
-    <div id="status-modal" class="modal">
+    <!-- Status Edit Modal -->
+    <div class="modal" id="status-modal">
         <div class="modal-content">
             <div class="modal-header">
                 <div class="modal-title">Update Vehicle Status</div>
@@ -503,32 +476,32 @@
         </div>
     </div>
 
-    <!-- Date Range Picker Modal -->
-    <div id="date-range-modal" class="date-range-modal">
-        <div class="date-range-content">
-            <div class="date-range-header">
-                <div class="date-range-title">Select Date Range</div>
-                <button class="date-range-close" id="date-range-close">✕</button>
+    <!-- Date Range Modal -->
+    <div class="modal" id="range-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">Select Date Range</div>
+                <button class="modal-close" id="range-close">✕</button>
             </div>
-            <div class="date-range-body">
-                <div class="date-input-group">
-                    <label>From Date</label>
-                    <input type="date" id="from-date" class="form-input">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">From Date</label>
+                    <input type="date" class="form-input" id="from-date">
                 </div>
-                <div class="date-input-group">
-                    <label>To Date</label>
-                    <input type="date" id="to-date" class="form-input">
+                <div class="form-group">
+                    <label class="form-label">To Date</label>
+                    <input type="date" class="form-input" id="to-date">
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" id="cancel-range">Cancel</button>
-                <button class="btn btn-primary" id="apply-range">Apply Range</button>
+                <button class="btn btn-secondary" id="range-cancel">Cancel</button>
+                <button class="btn btn-primary" id="range-apply">Apply Range</button>
             </div>
         </div>
     </div>
 
-    <!-- Loading Screen -->
-    <div id="loading" class="loading">
+    <!-- Loading -->
+    <div class="loading" id="loading">
         <div class="spinner"></div>
         <div class="loading-text">Loading fleet data...</div>
     </div>
