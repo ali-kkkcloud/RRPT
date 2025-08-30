@@ -112,14 +112,32 @@ class AuthManager {
         if (!currentUser) return;
         
         document.getElementById('user-role').textContent = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
-        document.getElementById('user-name').textContent = currentUser.name;
         
-        // Show/hide client selector for managers
+        // Update user name based on role and selection
+        if (currentUser.role === 'manager') {
+            if (selectedClient) {
+                const clientName = selectedClient.charAt(0).toUpperCase() + selectedClient.slice(1);
+                document.getElementById('user-name').textContent = `Fleet Manager - ${clientName}`;
+            } else {
+                document.getElementById('user-name').textContent = 'Fleet Manager - All Clients';
+            }
+        } else {
+            document.getElementById('user-name').textContent = currentUser.name;
+        }
+        
+        // Show/hide client selector and management for managers
         const clientSelector = document.getElementById('client-selector');
+        const managerSection = document.getElementById('manager-section');
+        
         if (currentUser.role === 'manager') {
             clientSelector.style.display = 'block';
+            managerSection.style.display = 'block';
+            
+            // Update client count badge
+            document.getElementById('client-count-badge').textContent = CONFIG.dynamicClients.size;
         } else {
             clientSelector.style.display = 'none';
+            managerSection.style.display = 'none';
         }
     }
 }
@@ -341,21 +359,23 @@ class DataManager {
     }
     
     static filterDataByClient(data, clientFilter = null) {
-        if (!clientFilter || userRole === 'manager') {
-            return data;
+        // If manager selects a client, use that filter
+        if (userRole === 'manager' && selectedClient) {
+            return data.filter(item => {
+                const client = (item.client || item.Client || item.company || '').toLowerCase();
+                return client.includes(selectedClient.toLowerCase());
+            });
         }
         
-        // Apply client filtering based on user role
+        // If client is logged in, filter by their data only
         if (userRole === 'client' && currentUser.filter) {
             return data.filter(item => {
                 const client = (item.client || item.Client || item.company || '').toLowerCase();
-                const vehicleNumber = item['Vehicle Number'] || item.plateNo || '';
-                
-                // Filter by exact client name match
                 return client.includes(currentUser.filter.toLowerCase());
             });
         }
         
+        // If no filter or manager viewing all, return all data
         return data;
     }
     
@@ -882,7 +902,11 @@ class UIManager {
         DateManager.updateDateSelector();
         
         // Load data for the new tab
-        DataManager.loadDataForCurrentTab();
+        if (tabName === 'client-manager') {
+            ClientManager.updateClientManagerUI();
+        } else {
+            DataManager.loadDataForCurrentTab();
+        }
     }
     
     static switchPeriod(period) {
@@ -1560,7 +1584,181 @@ class UIUpdater {
     }
 }
 
-// Enhanced Modal Manager
+// Client Manager Class
+class ClientManager {
+    static updateClientManagerUI() {
+        if (currentUser?.role !== 'manager') return;
+        
+        // Update stats
+        const totalClients = CONFIG.dynamicClients.size;
+        const activeLogins = Object.keys(CONFIG.auth.clients).length;
+        const totalVehicles = currentData.offline.length + currentData.alerts.length + currentData.speed.length;
+        
+        UIUpdater.animateValue(document.getElementById('total-clients'), 0, totalClients, 1000);
+        UIUpdater.animateValue(document.getElementById('active-logins'), 0, activeLogins, 1200);
+        UIUpdater.animateValue(document.getElementById('total-vehicles'), 0, totalVehicles, 1400);
+        
+        // Update client management table
+        this.updateClientTable();
+    }
+    
+    static updateClientTable() {
+        const tbody = document.getElementById('client-manager-table-body');
+        tbody.innerHTML = '';
+        
+        // Add existing clients with login credentials
+        Object.entries(CONFIG.auth.clients).forEach(([username, clientData]) => {
+            const vehicleCount = this.getVehicleCountForClient(clientData.filter);
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><strong>${clientData.name}</strong></td>
+                <td><span class="status-badge status-info">${username}</span></td>
+                <td><span class="status-badge status-warning">••••••••</span></td>
+                <td><span class="status-badge status-success">${vehicleCount}</span></td>
+                <td><span class="status-badge status-online">Active</span></td>
+                <td>Recently</td>
+                <td>
+                    <button class="btn btn-secondary" onclick="ClientManager.editClient('${username}')">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-secondary" onclick="ClientManager.resetPassword('${username}')">
+                        <i class="fas fa-key"></i>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+        
+        // Add clients without login credentials
+        Array.from(CONFIG.dynamicClients).forEach(clientName => {
+            if (!Object.values(CONFIG.auth.clients).some(c => c.filter === clientName)) {
+                const vehicleCount = this.getVehicleCountForClient(clientName);
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${clientName.charAt(0).toUpperCase() + clientName.slice(1)}</strong></td>
+                    <td><span class="status-badge status-warning">No Login</span></td>
+                    <td><span class="status-badge status-danger">Not Set</span></td>
+                    <td><span class="status-badge status-info">${vehicleCount}</span></td>
+                    <td><span class="status-badge status-warning">Inactive</span></td>
+                    <td>Never</td>
+                    <td>
+                        <button class="btn btn-primary" onclick="ClientManager.createLogin('${clientName}')">
+                            <i class="fas fa-plus"></i>
+                            Create Login
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            }
+        });
+    }
+    
+    static getVehicleCountForClient(clientFilter) {
+        let count = 0;
+        
+        // Count from offline data
+        count += currentData.offline.filter(item => {
+            const client = (item.client || item.Client || item.company || '').toLowerCase();
+            return client.includes(clientFilter.toLowerCase());
+        }).length;
+        
+        // Count from alerts data (unique vehicles)
+        const alertVehicles = new Set(currentData.alerts
+            .filter(item => {
+                const client = (item.company || '').toLowerCase();
+                return client.includes(clientFilter.toLowerCase());
+            })
+            .map(item => item.plateNo));
+        
+        // Count from speed data (unique vehicles)
+        const speedVehicles = new Set(currentData.speed
+            .filter(item => {
+                const client = (item.company || '').toLowerCase();
+                return client.includes(clientFilter.toLowerCase());
+            })
+            .map(item => item.plateNo));
+        
+        // Combine unique vehicles
+        const allVehicles = new Set([...alertVehicles, ...speedVehicles]);
+        
+        return Math.max(count, allVehicles.size);
+    }
+    
+    static editClient(username) {
+        const clientData = CONFIG.auth.clients[username];
+        if (!clientData) return;
+        
+        document.getElementById('new-client-name').value = clientData.name;
+        document.getElementById('new-client-username').value = username;
+        document.getElementById('new-client-password').value = clientData.password;
+        document.getElementById('new-client-description').value = `${clientData.name} client access`;
+        
+        document.getElementById('add-client-modal').style.display = 'flex';
+    }
+    
+    static createLogin(clientName) {
+        const username = clientName.toLowerCase();
+        document.getElementById('new-client-name').value = clientName.charAt(0).toUpperCase() + clientName.slice(1);
+        document.getElementById('new-client-username').value = username;
+        document.getElementById('new-client-password').value = 'client123';
+        document.getElementById('new-client-description').value = `Login access for ${clientName}`;
+        
+        document.getElementById('add-client-modal').style.display = 'flex';
+    }
+    
+    static resetPassword(username) {
+        const newPassword = 'temp' + Math.random().toString(36).substr(2, 6);
+        CONFIG.auth.clients[username].password = newPassword;
+        
+        NotificationManager.showSuccess(`Password reset for ${username}: ${newPassword}`);
+        this.updateClientTable();
+    }
+}
+
+// Enhanced Modal Manager with Client Management
+class ModalManager {
+    static addNewClient() {
+        // Clear form
+        document.getElementById('new-client-name').value = '';
+        document.getElementById('new-client-username').value = '';
+        document.getElementById('new-client-password').value = '';
+        document.getElementById('new-client-description').value = '';
+        
+        document.getElementById('add-client-modal').style.display = 'flex';
+    }
+    
+    static closeAddClientModal() {
+        document.getElementById('add-client-modal').style.display = 'none';
+    }
+    
+    static async saveNewClient() {
+        const name = document.getElementById('new-client-name').value.trim();
+        const username = document.getElementById('new-client-username').value.trim().toLowerCase();
+        const password = document.getElementById('new-client-password').value;
+        
+        if (!name || !username || !password) {
+            NotificationManager.showError('Please fill all required fields');
+            return;
+        }
+        
+        // Add to CONFIG
+        CONFIG.auth.clients[username] = {
+            password: password,
+            name: name,
+            filter: username
+        };
+        
+        CONFIG.dynamicClients.add(username);
+        
+        NotificationManager.showSuccess(`Client ${name} added successfully!`);
+        
+        // Update UI
+        DataManager.updateClientDropdown();
+        AuthManager.updateUserInfo();
+        ClientManager.updateClientTable();
+        
+        this.closeAddClientModal();
+    }
 class ModalManager {
     static editVehicleStatus(vehicleNumber) {
         document.getElementById('modal-vehicle').value = vehicleNumber;
@@ -2025,11 +2223,25 @@ function setupEventListeners() {
         DataManager.loadDataForCurrentTab();
     });
 
-    // Client selector (for managers)
+    // Client selector change handler
     document.getElementById('client-dropdown').addEventListener('change', (e) => {
         selectedClient = e.target.value;
         console.log(`👤 Manager selected client: ${selectedClient || 'All'}`);
+        
+        // Clear current data
+        currentData = { offline: [], speed: [], alerts: [] };
+        
+        // Reload all data for selected client
         DataManager.loadDataForCurrentTab();
+        
+        // Update user info display
+        const userInfo = document.getElementById('user-name');
+        if (selectedClient) {
+            const clientName = selectedClient.charAt(0).toUpperCase() + selectedClient.slice(1);
+            userInfo.textContent = `Fleet Manager - ${clientName}`;
+        } else {
+            userInfo.textContent = 'Fleet Manager - All Clients';
+        }
     });
 
     // Action buttons
@@ -2051,6 +2263,11 @@ function setupEventListeners() {
     document.getElementById('modal-close').addEventListener('click', ModalManager.closeStatusModal);
     document.getElementById('cancel-status').addEventListener('click', ModalManager.closeStatusModal);
     document.getElementById('save-status').addEventListener('click', ModalManager.saveVehicleStatus);
+
+    // Add client modal
+    document.getElementById('add-client-close').addEventListener('click', ModalManager.closeAddClientModal);
+    document.getElementById('cancel-add-client').addEventListener('click', ModalManager.closeAddClientModal);
+    document.getElementById('save-new-client').addEventListener('click', ModalManager.saveNewClient);
 
     // Click outside modals to close
     document.addEventListener('click', (e) => {
