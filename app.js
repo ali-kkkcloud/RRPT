@@ -171,6 +171,7 @@ class DateManager {
         }
     }
     
+    // Range picker methods (fixed static method calls)
     static openRangePicker() {
         document.getElementById('range-modal').style.display = 'flex';
         
@@ -277,6 +278,50 @@ class DataManager {
             }
         });
         return Array.from(clients);
+    }
+    
+    static async preloadAllClients() {
+        try {
+            console.log('🔍 Preloading all clients from spreadsheet...');
+            
+            // Load offline data to get all clients
+            const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.sheets.offline}/export?format=csv&gid=0`;
+            const csvText = await this.fetchWithFallback(csvUrl);
+            
+            if (csvText) {
+                const parsed = Papa.parse(csvText, { 
+                    header: true, 
+                    skipEmptyLines: true,
+                    transformHeader: header => header.trim()
+                });
+                
+                // Extract all unique clients
+                this.extractUniqueClients(parsed.data);
+                this.updateClientDropdown();
+                
+                console.log(`✅ Preloaded ${CONFIG.dynamicClients.size} clients from spreadsheet`);
+            } else {
+                // Fallback to sample data
+                const sampleData = [
+                    ...this.getSampleOfflineData(),
+                    ...this.getSampleAlertsData(),
+                    ...this.getSampleSpeedData()
+                ];
+                this.extractUniqueClients(sampleData);
+                this.updateClientDropdown();
+                console.log('📋 Using sample clients as fallback');
+            }
+        } catch (error) {
+            console.error('❌ Failed to preload clients:', error);
+            // Fallback to sample data
+            const sampleData = [
+                ...this.getSampleOfflineData(),
+                ...this.getSampleAlertsData(),
+                ...this.getSampleSpeedData()
+            ];
+            this.extractUniqueClients(sampleData);
+            this.updateClientDropdown();
+        }
     }
     
     static updateClientDropdown() {
@@ -1926,6 +1971,9 @@ function initializeApp() {
     UIManager.setupMobileResponsive();
     SearchFilterManager.setupSearch();
     SearchFilterManager.setupTableFilters();
+    
+    // Preload all clients from spreadsheet for manager dropdown
+    DataManager.preloadAllClients();
     
     // Initialize with sample data for immediate UI display
     initializeWithSampleData();
