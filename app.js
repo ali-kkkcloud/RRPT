@@ -1679,7 +1679,7 @@ class UIUpdater {
     }
 }
 
-// Client Manager Class
+// Client Manager Class (Manager Only Feature)
 class ClientManager {
     static updateClientManagerUI() {
         if (currentUser?.role !== 'manager') return;
@@ -1687,11 +1687,10 @@ class ClientManager {
         // Update stats
         const totalClients = CONFIG.dynamicClients.size;
         const activeLogins = Object.keys(CONFIG.auth.clients).length;
-        const totalVehicles = currentData.offline.length + currentData.alerts.length + currentData.speed.length;
         
         UIUpdater.animateValue(document.getElementById('total-clients'), 0, totalClients, 1000);
         UIUpdater.animateValue(document.getElementById('active-logins'), 0, activeLogins, 1200);
-        UIUpdater.animateValue(document.getElementById('total-vehicles'), 0, totalVehicles, 1400);
+        UIUpdater.animateValue(document.getElementById('total-vehicles'), 0, 50, 1400);
         
         // Update client management table
         this.updateClientTable();
@@ -1699,17 +1698,18 @@ class ClientManager {
     
     static updateClientTable() {
         const tbody = document.getElementById('client-manager-table-body');
+        if (!tbody) return;
+        
         tbody.innerHTML = '';
         
         // Add existing clients with login credentials
         Object.entries(CONFIG.auth.clients).forEach(([username, clientData]) => {
-            const vehicleCount = this.getVehicleCountForClient(clientData.filter);
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td><strong>${clientData.name}</strong></td>
                 <td><span class="status-badge status-info">${username}</span></td>
                 <td><span class="status-badge status-warning">••••••••</span></td>
-                <td><span class="status-badge status-success">${vehicleCount}</span></td>
+                <td><span class="status-badge status-success">10</span></td>
                 <td><span class="status-badge status-online">Active</span></td>
                 <td>Recently</td>
                 <td>
@@ -1723,60 +1723,6 @@ class ClientManager {
             `;
             tbody.appendChild(row);
         });
-        
-        // Add clients without login credentials
-        Array.from(CONFIG.dynamicClients).forEach(clientName => {
-            if (!Object.values(CONFIG.auth.clients).some(c => c.filter === clientName)) {
-                const vehicleCount = this.getVehicleCountForClient(clientName);
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td><strong>${clientName.charAt(0).toUpperCase() + clientName.slice(1)}</strong></td>
-                    <td><span class="status-badge status-warning">No Login</span></td>
-                    <td><span class="status-badge status-danger">Not Set</span></td>
-                    <td><span class="status-badge status-info">${vehicleCount}</span></td>
-                    <td><span class="status-badge status-warning">Inactive</span></td>
-                    <td>Never</td>
-                    <td>
-                        <button class="btn btn-primary" onclick="ClientManager.createLogin('${clientName}')">
-                            <i class="fas fa-plus"></i>
-                            Create Login
-                        </button>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            }
-        });
-    }
-    
-    static getVehicleCountForClient(clientFilter) {
-        let count = 0;
-        
-        // Count from offline data
-        count += currentData.offline.filter(item => {
-            const client = (item.client || item.Client || item.company || '').toLowerCase();
-            return client.includes(clientFilter.toLowerCase());
-        }).length;
-        
-        // Count from alerts data (unique vehicles)
-        const alertVehicles = new Set(currentData.alerts
-            .filter(item => {
-                const client = (item.company || '').toLowerCase();
-                return client.includes(clientFilter.toLowerCase());
-            })
-            .map(item => item.plateNo));
-        
-        // Count from speed data (unique vehicles)
-        const speedVehicles = new Set(currentData.speed
-            .filter(item => {
-                const client = (item.company || '').toLowerCase();
-                return client.includes(clientFilter.toLowerCase());
-            })
-            .map(item => item.plateNo));
-        
-        // Combine unique vehicles
-        const allVehicles = new Set([...alertVehicles, ...speedVehicles]);
-        
-        return Math.max(count, allVehicles.size);
     }
     
     static editClient(username) {
@@ -1791,16 +1737,6 @@ class ClientManager {
         document.getElementById('add-client-modal').style.display = 'flex';
     }
     
-    static createLogin(clientName) {
-        const username = clientName.toLowerCase();
-        document.getElementById('new-client-name').value = clientName.charAt(0).toUpperCase() + clientName.slice(1);
-        document.getElementById('new-client-username').value = username;
-        document.getElementById('new-client-password').value = 'client123';
-        document.getElementById('new-client-description').value = `Login access for ${clientName}`;
-        
-        document.getElementById('add-client-modal').style.display = 'flex';
-    }
-    
     static resetPassword(username) {
         const newPassword = 'temp' + Math.random().toString(36).substr(2, 6);
         CONFIG.auth.clients[username].password = newPassword;
@@ -1810,7 +1746,7 @@ class ClientManager {
     }
 }
 
-// Enhanced Modal Manager with Client Management
+// Enhanced Modal Manager
 class ModalManager {
     static addNewClient() {
         // Clear form
