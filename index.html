@@ -123,8 +123,17 @@
                     </div>
                 </div>
                 
-                <div class="nav-section">
+                <div class="nav-section" id="manager-section" style="display: none;">
                     <div class="nav-section-title">Management</div>
+                    <div class="nav-item" data-tab="client-manager">
+                        <div class="nav-icon"><i class="fas fa-users-cog"></i></div>
+                        <div class="nav-text">Client Manager</div>
+                        <div class="nav-badge" id="client-count-badge">0</div>
+                    </div>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="nav-section-title">Account</div>
                     <div class="nav-item" onclick="logout()">
                         <div class="nav-icon"><i class="fas fa-sign-out-alt"></i></div>
                         <div class="nav-text">Logout</div>
@@ -609,6 +618,102 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Client Manager Tab (Manager Only) -->
+                <div class="tab-content" id="client-manager">
+                    <div class="stats-grid">
+                        <div class="stat-card gradient-info">
+                            <div class="stat-icon">
+                                <i class="fas fa-building"></i>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-value" id="total-clients">0</div>
+                                <div class="stat-title">Total Clients</div>
+                                <div class="stat-change positive">
+                                    <i class="fas fa-arrow-up"></i>
+                                    <span>Active clients</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card gradient-success">
+                            <div class="stat-icon">
+                                <i class="fas fa-user-check"></i>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-value" id="active-logins">0</div>
+                                <div class="stat-title">Active Accounts</div>
+                                <div class="stat-change positive">
+                                    <i class="fas fa-check"></i>
+                                    <span>With login access</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card gradient-warning">
+                            <div class="stat-icon">
+                                <i class="fas fa-truck"></i>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-value" id="total-vehicles">0</div>
+                                <div class="stat-title">Total Vehicles</div>
+                                <div class="stat-change neutral">
+                                    <span>Across all clients</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card gradient-2">
+                            <div class="stat-icon">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-value">98%</div>
+                                <div class="stat-title">Data Coverage</div>
+                                <div class="stat-change positive">
+                                    <i class="fas fa-arrow-up"></i>
+                                    <span>System uptime</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="table-section">
+                        <div class="table-card">
+                            <div class="table-header">
+                                <div class="table-title">
+                                    <i class="fas fa-users-cog"></i>
+                                    Client Management
+                                </div>
+                                <div class="table-filters">
+                                    <button class="btn btn-primary" onclick="ModalManager.addNewClient()">
+                                        <i class="fas fa-plus"></i>
+                                        Add Client
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="table-wrapper">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Client Name</th>
+                                            <th>Username</th>
+                                            <th>Password</th>
+                                            <th>Vehicles</th>
+                                            <th>Status</th>
+                                            <th>Last Active</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="client-manager-table-body">
+                                        <!-- Data populated by JavaScript -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </main>
     </div>
@@ -678,6 +783,43 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" id="range-cancel">Cancel</button>
                 <button class="btn btn-primary" id="range-apply">Apply Range</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Client Modal -->
+    <div class="modal" id="add-client-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <i class="fas fa-user-plus"></i>
+                    Add New Client
+                </div>
+                <button class="modal-close" id="add-client-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Client Name</label>
+                    <input type="text" class="form-input" id="new-client-name" placeholder="Enter client name">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Username</label>
+                    <input type="text" class="form-input" id="new-client-username" placeholder="Enter username for login">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <input type="password" class="form-input" id="new-client-password" placeholder="Enter password">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-textarea" id="new-client-description" placeholder="Optional client description..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancel-add-client">Cancel</button>
+                <button class="btn btn-primary" id="save-new-client">Add Client</button>
             </div>
         </div>
     </div>
