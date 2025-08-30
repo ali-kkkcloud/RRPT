@@ -14,14 +14,39 @@ const CONFIG = {
     },
     auth: {
         clients: {
-            'g4s': { password: 'g4s123', name: 'G4S Security', filter: 'g4s' },
-            'taxshe': { password: 'taxshe123', name: 'Taxshe Transport', filter: 'taxshe' },
-            'milo': { password: 'milo123', name: 'Milo Logistics', filter: 'milo' },
-            'abc': { password: 'abc123', name: 'ABC Transport', filter: 'abc' },
-            'xyz': { password: 'xyz123', name: 'XYZ Logistics', filter: 'xyz' }
+            'g4s': { 
+                password: 'g4s123', 
+                name: 'G4S Security', 
+                filter: 'g4s',
+                // Mapping - spreadsheet mein ye names ho sakte hain
+                aliases: ['g4s', 'g4s security', 'g4ssecurity', 'g-4-s']
+            },
+            'taxshe': { 
+                password: 'taxshe123', 
+                name: 'Taxshe Transport', 
+                filter: 'taxshe',
+                aliases: ['taxshe', 'taxshe transport', 'taxi']
+            },
+            'milo': { 
+                password: 'milo123', 
+                name: 'Milo Logistics', 
+                filter: 'milo',
+                aliases: ['milo', 'milo logistics', 'milologistics']
+            }
         },
         managers: {
             'admin': { password: 'admin123', name: 'Fleet Manager' }
+        },
+        // Client-Data mapping table
+        clientMapping: {
+            // Spreadsheet mein jo bhi client name ho, ye map ho jaayega
+            'g4s security': 'g4s',
+            'g4ssecurity': 'g4s', 
+            'g-4-s': 'g4s',
+            'taxshe transport': 'taxshe',
+            'taxi': 'taxshe',
+            'milo logistics': 'milo',
+            'milologistics': 'milo'
         }
     },
     // Dynamic client list will be populated from actual data
@@ -291,11 +316,47 @@ class DataManager {
         data.forEach(item => {
             const client = (item.client || item.Client || item.company || '').toLowerCase().trim();
             if (client && client !== 'unknown') {
-                clients.add(client);
+                // Check if this client maps to an existing login client
+                const mappedClient = this.mapClientToLogin(client);
+                if (mappedClient) {
+                    clients.add(mappedClient);
+                } else {
+                    clients.add(client);
+                }
                 CONFIG.dynamicClients.add(client);
             }
         });
         return Array.from(clients);
+    }
+    
+    static mapClientToLogin(clientName) {
+        const cleanName = clientName.toLowerCase().trim();
+        
+        // Direct mapping check
+        if (CONFIG.auth.clientMapping[cleanName]) {
+            return CONFIG.auth.clientMapping[cleanName];
+        }
+        
+        // Alias checking
+        for (const [loginUser, clientData] of Object.entries(CONFIG.auth.clients)) {
+            if (clientData.aliases && clientData.aliases.some(alias => 
+                cleanName.includes(alias.toLowerCase()) || alias.toLowerCase().includes(cleanName)
+            )) {
+                return loginUser;
+            }
+        }
+        
+        // Direct match with login usernames
+        if (CONFIG.auth.clients[cleanName]) {
+            return cleanName;
+        }
+        
+        return null;
+    }
+    
+    static addClientMapping(spreadsheetName, loginClient) {
+        CONFIG.auth.clientMapping[spreadsheetName.toLowerCase()] = loginClient;
+        console.log(`📋 Added mapping: "${spreadsheetName}" → "${loginClient}"`);
     }
     
     static async preloadAllClients() {
@@ -362,16 +423,50 @@ class DataManager {
         // If manager selects a client, use that filter
         if (userRole === 'manager' && selectedClient) {
             return data.filter(item => {
-                const client = (item.client || item.Client || item.company || '').toLowerCase();
-                return client.includes(selectedClient.toLowerCase());
+                const client = (item.client || item.Client || item.company || '').toLowerCase().trim();
+                
+                // Check direct match
+                if (client.includes(selectedClient.toLowerCase())) {
+                    return true;
+                }
+                
+                // Check mapped client
+                const mappedClient = this.mapClientToLogin(client);
+                if (mappedClient === selectedClient) {
+                    return true;
+                }
+                
+                // Check aliases
+                const clientData = CONFIG.auth.clients[selectedClient];
+                if (clientData?.aliases) {
+                    return clientData.aliases.some(alias => 
+                        client.includes(alias.toLowerCase()) || alias.toLowerCase().includes(client)
+                    );
+                }
+                
+                return false;
             });
         }
         
         // If client is logged in, filter by their data only
         if (userRole === 'client' && currentUser.filter) {
             return data.filter(item => {
-                const client = (item.client || item.Client || item.company || '').toLowerCase();
-                return client.includes(currentUser.filter.toLowerCase());
+                const client = (item.client || item.Client || item.company || '').toLowerCase().trim();
+                
+                // Check direct match
+                if (client.includes(currentUser.filter.toLowerCase())) {
+                    return true;
+                }
+                
+                // Check aliases
+                const clientData = CONFIG.auth.clients[currentUser.filter];
+                if (clientData?.aliases) {
+                    return clientData.aliases.some(alias => 
+                        client.includes(alias.toLowerCase()) || alias.toLowerCase().includes(client)
+                    );
+                }
+                
+                return false;
             });
         }
         
