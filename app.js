@@ -14,16 +14,18 @@ const CONFIG = {
     },
     auth: {
         clients: {
-            'g4s': { password: 'password', name: 'G4S Security', filter: 'g4s' },
-            'north': { password: 'north123', name: 'North Region', filter: 'north' },
-            'south': { password: 'south123', name: 'South Region', filter: 'south' },
-            'east': { password: 'east123', name: 'East Region', filter: 'east' },
-            'west': { password: 'west123', name: 'West Region', filter: 'west' }
+            'g4s': { password: 'g4s123', name: 'G4S Security', filter: 'g4s' },
+            'taxshe': { password: 'taxshe123', name: 'Taxshe Transport', filter: 'taxshe' },
+            'milo': { password: 'milo123', name: 'Milo Logistics', filter: 'milo' },
+            'abc': { password: 'abc123', name: 'ABC Transport', filter: 'abc' },
+            'xyz': { password: 'xyz123', name: 'XYZ Logistics', filter: 'xyz' }
         },
         managers: {
             'admin': { password: 'admin123', name: 'Fleet Manager' }
         }
-    }
+    },
+    // Dynamic client list will be populated from actual data
+    dynamicClients: new Set()
 };
 
 // Global State
@@ -43,18 +45,35 @@ class AuthManager {
         console.log(`🔐 Attempting ${mode} login for: ${username}`);
         
         if (mode === 'client') {
-            const client = CONFIG.auth.clients[username.toLowerCase()];
-            if (client && client.password === password) {
+            const clientLower = username.toLowerCase();
+            
+            // First check if it's a predefined client with specific password
+            if (CONFIG.auth.clients[clientLower] && CONFIG.auth.clients[clientLower].password === password) {
                 currentUser = {
-                    username: username.toLowerCase(),
-                    name: client.name,
+                    username: clientLower,
+                    name: CONFIG.auth.clients[clientLower].name,
                     role: 'client',
-                    filter: client.filter
+                    filter: CONFIG.auth.clients[clientLower].filter
                 };
                 userRole = 'client';
-                selectedClient = client.filter;
+                selectedClient = CONFIG.auth.clients[clientLower].filter;
                 return true;
             }
+            
+            // Check if it's a dynamic client from data with generic password
+            if (CONFIG.dynamicClients.has(clientLower) && password === 'client123') {
+                const clientName = clientLower.charAt(0).toUpperCase() + clientLower.slice(1);
+                currentUser = {
+                    username: clientLower,
+                    name: clientName,
+                    role: 'client',
+                    filter: clientLower
+                };
+                userRole = 'client';
+                selectedClient = clientLower;
+                return true;
+            }
+            
         } else if (mode === 'manager') {
             const manager = CONFIG.auth.managers[username.toLowerCase()];
             if (manager && manager.password === password) {
@@ -182,7 +201,7 @@ class DateManager {
         
         console.log(`📅 Date range applied: ${fromDate} to ${toDate}`);
         NotificationManager.showSuccess(`Date range applied: ${fromDate} to ${toDate}`);
-        this.closeRangePicker();
+        DateManager.closeRangePicker();
         
         // Reload data for the selected range
         DataManager.loadDataForCurrentTab();
@@ -248,6 +267,34 @@ class DataManager {
         return null;
     }
     
+    static extractUniqueClients(data) {
+        const clients = new Set();
+        data.forEach(item => {
+            const client = (item.client || item.Client || item.company || '').toLowerCase().trim();
+            if (client && client !== 'unknown') {
+                clients.add(client);
+                CONFIG.dynamicClients.add(client);
+            }
+        });
+        return Array.from(clients);
+    }
+    
+    static updateClientDropdown() {
+        const dropdown = document.getElementById('client-dropdown');
+        if (!dropdown) return;
+        
+        // Keep the "All Clients" option
+        dropdown.innerHTML = '<option value="">All Clients</option>';
+        
+        // Add clients from data
+        Array.from(CONFIG.dynamicClients).sort().forEach(client => {
+            const clientName = client.charAt(0).toUpperCase() + client.slice(1);
+            dropdown.innerHTML += `<option value="${client}">${clientName}</option>`;
+        });
+        
+        console.log(`📋 Updated client dropdown with ${CONFIG.dynamicClients.size} clients`);
+    }
+    
     static filterDataByClient(data, clientFilter = null) {
         if (!clientFilter || userRole === 'manager') {
             return data;
@@ -259,9 +306,8 @@ class DataManager {
                 const client = (item.client || item.Client || item.company || '').toLowerCase();
                 const vehicleNumber = item['Vehicle Number'] || item.plateNo || '';
                 
-                // Filter by client name or vehicle prefix
-                return client.includes(currentUser.filter) || 
-                       vehicleNumber.toLowerCase().includes(currentUser.filter);
+                // Filter by exact client name match
+                return client.includes(currentUser.filter.toLowerCase());
             });
         }
         
@@ -320,12 +366,16 @@ class DataManager {
                     transformHeader: header => header.trim()
                 });
                 
-                // Filter for offline vehicles (24+ hours) and apply client filtering
+                // Filter for offline vehicles (24+ hours)
                 let filteredData = parsed.data.filter(row => {
                     const offlineHours = parseFloat(row['Offline Since (hrs)'] || 0);
                     const vehicleNumber = row['Vehicle Number'] || row['vehicle_number'];
                     return offlineHours >= 24 && vehicleNumber;
                 });
+                
+                // Extract unique clients and update dropdown
+                this.extractUniqueClients(filteredData);
+                this.updateClientDropdown();
                 
                 // Apply client filtering
                 filteredData = this.filterDataByClient(filteredData, selectedClient);
@@ -333,7 +383,7 @@ class DataManager {
                 if (filteredData.length > 0) {
                     await this.loadExistingStatus(filteredData);
                     currentData.offline = filteredData;
-                    console.log(`✅ Loaded ${filteredData.length} offline vehicles`);
+                    console.log(`✅ Loaded ${filteredData.length} offline vehicles from ${CONFIG.dynamicClients.size} clients`);
                 } else {
                     throw new Error('No valid offline data found');
                 }
@@ -343,6 +393,9 @@ class DataManager {
         } catch (error) {
             console.error('❌ Offline data loading failed:', error);
             currentData.offline = this.getSampleOfflineData();
+            // Extract clients from sample data too
+            this.extractUniqueClients(currentData.offline);
+            this.updateClientDropdown();
         }
         
         UIUpdater.updateOfflineUI();
@@ -358,12 +411,18 @@ class DataManager {
                 currentData.alerts = await this.loadDailyAlertsData();
             }
             
+            // Extract unique clients from alerts data
+            this.extractUniqueClients(currentData.alerts);
+            this.updateClientDropdown();
+            
             // Apply client filtering
             currentData.alerts = this.filterDataByClient(currentData.alerts, selectedClient);
             console.log(`✅ Loaded ${currentData.alerts.length} AI alerts`);
         } catch (error) {
             console.error('❌ AI alerts loading failed:', error);
             currentData.alerts = this.getSampleAlertsData();
+            this.extractUniqueClients(currentData.alerts);
+            this.updateClientDropdown();
         }
         
         UIUpdater.updateAIAlertsUI();
@@ -379,12 +438,18 @@ class DataManager {
                 currentData.speed = await this.loadDailySpeedData();
             }
             
+            // Extract unique clients from speed data
+            this.extractUniqueClients(currentData.speed);
+            this.updateClientDropdown();
+            
             // Apply client filtering
             currentData.speed = this.filterDataByClient(currentData.speed, selectedClient);
             console.log(`✅ Loaded ${currentData.speed.length} speed violations`);
         } catch (error) {
             console.error('❌ Speed data loading failed:', error);
             currentData.speed = this.getSampleSpeedData();
+            this.extractUniqueClients(currentData.speed);
+            this.updateClientDropdown();
         }
         
         UIUpdater.updateSpeedUI();
@@ -645,38 +710,44 @@ class DataManager {
         }
     }
     
-    // Sample data methods (enhanced with client info)
+    // Sample data methods (enhanced with different actual clients)
     static getSampleOfflineData() {
         return [
-            { 'Vehicle Number': 'HR55AX4712', 'Client': 'G4S Security', 'Last Online': '2025-08-20', 'Offline Since (hrs)': '112', 'Remarks': 'Parked at depot', 'Status': 'Parking/Garage' },
-            { 'Vehicle Number': 'TS08HC6654', 'Client': 'South Region', 'Last Online': '2025-05-12', 'Offline Since (hrs)': '2515', 'Remarks': 'Under maintenance', 'Status': 'Technical Problem' },
-            { 'Vehicle Number': 'AP39HS4926', 'Client': 'North Region', 'Last Online': '2025-08-23', 'Offline Since (hrs)': '52', 'Remarks': 'Driver sick leave', 'Status': 'Offline' },
-            { 'Vehicle Number': 'HR63F2958', 'Client': 'G4S Security', 'Last Online': '2025-05-09', 'Offline Since (hrs)': '2586', 'Remarks': 'GPS connectivity issue', 'Status': 'Technical Problem' },
-            { 'Vehicle Number': 'CH01CK2912', 'Client': 'East Region', 'Last Online': '2025-08-25', 'Offline Since (hrs)': '48', 'Remarks': 'Technical checkup pending', 'Status': 'Technical Problem' },
-            { 'Vehicle Number': 'WB22XY1234', 'Client': 'West Region', 'Last Online': '2025-08-22', 'Offline Since (hrs)': '168', 'Remarks': 'Route maintenance', 'Status': 'Parking/Garage' }
+            { 'Vehicle Number': 'HR55AX4712', 'Client': 'G4S', 'Last Online': '2025-08-20', 'Offline Since (hrs)': '112', 'Remarks': 'Parked at depot', 'Status': 'Parking/Garage' },
+            { 'Vehicle Number': 'TS08HC6654', 'Client': 'Taxshe', 'Last Online': '2025-05-12', 'Offline Since (hrs)': '2515', 'Remarks': 'Under maintenance', 'Status': 'Technical Problem' },
+            { 'Vehicle Number': 'AP39HS4926', 'Client': 'Milo', 'Last Online': '2025-08-23', 'Offline Since (hrs)': '52', 'Remarks': 'Driver sick leave', 'Status': 'Offline' },
+            { 'Vehicle Number': 'HR63F2958', 'Client': 'G4S', 'Last Online': '2025-05-09', 'Offline Since (hrs)': '2586', 'Remarks': 'GPS connectivity issue', 'Status': 'Technical Problem' },
+            { 'Vehicle Number': 'CH01CK2912', 'Client': 'ABC Transport', 'Last Online': '2025-08-25', 'Offline Since (hrs)': '48', 'Remarks': 'Technical checkup pending', 'Status': 'Technical Problem' },
+            { 'Vehicle Number': 'WB22XY1234', 'Client': 'XYZ Logistics', 'Last Online': '2025-08-22', 'Offline Since (hrs)': '168', 'Remarks': 'Route maintenance', 'Status': 'Parking/Garage' },
+            { 'Vehicle Number': 'DL88MN9876', 'Client': 'Taxshe', 'Last Online': '2025-08-21', 'Offline Since (hrs)': '92', 'Remarks': 'Battery issue', 'Status': 'Technical Problem' },
+            { 'Vehicle Number': 'MH12PQ5432', 'Client': 'Milo', 'Last Online': '2025-08-19', 'Offline Since (hrs)': '256', 'Remarks': 'Accident repair', 'Status': 'Technical Problem' }
         ];
     }
     
     static getSampleAlertsData() {
         return [
-            { plateNo: 'HR47G5244', company: 'G4S Security', alarmType: 'Distracted Driving', startingTime: '08:30:07', imageLink: '' },
-            { plateNo: 'HR55AX4712', company: 'G4S Security', alarmType: 'Call Alarm', startingTime: '16:09:09', imageLink: '' },
-            { plateNo: 'HR63F2958', company: 'North Region', alarmType: 'Unfastened Seatbelt', startingTime: '07:54:47', imageLink: '' },
-            { plateNo: 'TS08HC6654', company: 'South Region', alarmType: 'Unfastened Seatbelt', startingTime: '08:31:05', imageLink: '' },
-            { plateNo: 'AP39HS4926', company: 'North Region', alarmType: 'Distracted Driving', startingTime: '11:19:28', imageLink: '' },
-            { plateNo: 'WB22XY1234', company: 'West Region', alarmType: 'Call Alarm', startingTime: '14:22:15', imageLink: '' }
+            { plateNo: 'HR47G5244', company: 'G4S', alarmType: 'Distracted Driving', startingTime: '08:30:07', imageLink: '' },
+            { plateNo: 'HR55AX4712', company: 'G4S', alarmType: 'Call Alarm', startingTime: '16:09:09', imageLink: '' },
+            { plateNo: 'TS63F2958', company: 'Taxshe', alarmType: 'Unfastened Seatbelt', startingTime: '07:54:47', imageLink: '' },
+            { plateNo: 'AP08HC6654', company: 'Milo', alarmType: 'Unfastened Seatbelt', startingTime: '08:31:05', imageLink: '' },
+            { plateNo: 'CH39HS4926', company: 'ABC Transport', alarmType: 'Distracted Driving', startingTime: '11:19:28', imageLink: '' },
+            { plateNo: 'WB22XY1234', company: 'XYZ Logistics', alarmType: 'Call Alarm', startingTime: '14:22:15', imageLink: '' },
+            { plateNo: 'DL88MN9876', company: 'Taxshe', alarmType: 'Smoking Detection', startingTime: '13:45:22', imageLink: '' },
+            { plateNo: 'MH12PQ5432', company: 'Milo', alarmType: 'Fatigue Detection', startingTime: '18:30:45', imageLink: '' }
         ];
     }
     
     static getSampleSpeedData() {
         return [
-            { plateNo: 'HR63F2958', company: 'G4S Security', startingTime: '05:58:13', speed: 94.5 },
-            { plateNo: 'TS08HC6654', company: 'South Region', startingTime: '16:46:15', speed: 92.9 },
-            { plateNo: 'HR55AX4712', company: 'G4S Security', startingTime: '11:44:44', speed: 90.1 },
-            { plateNo: 'AP39HS4926', company: 'North Region', startingTime: '16:09:09', speed: 88.2 },
-            { plateNo: 'HR47G5244', company: 'North Region', startingTime: '07:54:47', speed: 95.1 },
-            { plateNo: 'CH01CK2912', company: 'East Region', startingTime: '12:40:42', speed: 77.5 },
-            { plateNo: 'WB22XY1234', company: 'West Region', startingTime: '09:15:30', speed: 89.8 }
+            { plateNo: 'HR63F2958', company: 'G4S', startingTime: '05:58:13', speed: 94.5 },
+            { plateNo: 'TS08HC6654', company: 'Taxshe', startingTime: '16:46:15', speed: 92.9 },
+            { plateNo: 'HR55AX4712', company: 'G4S', startingTime: '11:44:44', speed: 90.1 },
+            { plateNo: 'AP39HS4926', company: 'Milo', startingTime: '16:09:09', speed: 88.2 },
+            { plateNo: 'HR47G5244', company: 'G4S', startingTime: '07:54:47', speed: 95.1 },
+            { plateNo: 'CH01CK2912', company: 'ABC Transport', startingTime: '12:40:42', speed: 77.5 },
+            { plateNo: 'WB22XY1234', company: 'XYZ Logistics', startingTime: '09:15:30', speed: 89.8 },
+            { plateNo: 'DL88MN9876', company: 'Taxshe', startingTime: '14:20:18', speed: 96.3 },
+            { plateNo: 'MH12PQ5432', company: 'Milo', startingTime: '10:35:25', speed: 82.7 }
         ];
     }
     
