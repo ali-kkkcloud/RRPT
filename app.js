@@ -1746,50 +1746,7 @@ class ClientManager {
     }
 }
 
-// Enhanced Modal Manager
-class ModalManager {
-    static addNewClient() {
-        // Clear form
-        document.getElementById('new-client-name').value = '';
-        document.getElementById('new-client-username').value = '';
-        document.getElementById('new-client-password').value = '';
-        document.getElementById('new-client-description').value = '';
-        
-        document.getElementById('add-client-modal').style.display = 'flex';
-    }
-    
-    static closeAddClientModal() {
-        document.getElementById('add-client-modal').style.display = 'none';
-    }
-    
-    static async saveNewClient() {
-        const name = document.getElementById('new-client-name').value.trim();
-        const username = document.getElementById('new-client-username').value.trim().toLowerCase();
-        const password = document.getElementById('new-client-password').value;
-        
-        if (!name || !username || !password) {
-            NotificationManager.showError('Please fill all required fields');
-            return;
-        }
-        
-        // Add to CONFIG
-        CONFIG.auth.clients[username] = {
-            password: password,
-            name: name,
-            filter: username
-        };
-        
-        CONFIG.dynamicClients.add(username);
-        
-        NotificationManager.showSuccess(`Client ${name} added successfully!`);
-        
-        // Update UI
-        DataManager.updateClientDropdown();
-        AuthManager.updateUserInfo();
-        ClientManager.updateClientTable();
-        
-        this.closeAddClientModal();
-    }
+// Enhanced Modal Manager - FIXED VERSION
 class ModalManager {
     static editVehicleStatus(vehicleNumber) {
         document.getElementById('modal-vehicle').value = vehicleNumber;
@@ -1806,100 +1763,6 @@ class ModalManager {
         const vehicleNumber = document.getElementById('modal-vehicle').value;
         const status = document.getElementById('status-select').value;
         const reason = document.getElementById('reason-input').value;
-        
-        if (!vehicleNumber || !status) {
-            showError('Please fill required fields');
-            return;
-        }
-        
-        try {
-            if (supabaseClient) {
-                const { data, error } = await supabaseClient
-                    .from('offline_status')
-                    .upsert({
-                        vehicle_number: vehicleNumber,
-                        current_status: status,
-                        reason: reason.trim() || null,
-                        updated_at: new Date().toISOString(),
-                        updated_by: currentUser?.name || 'User'
-                    });
-                
-                if (error) throw error;
-                showSuccess('Status updated successfully!');
-            } else {
-                showSuccess('Status updated locally');
-            }
-            
-            // Update UI
-            const statusElement = document.getElementById(`status-${vehicleNumber}`);
-            if (statusElement) {
-                statusElement.className = `status-badge ${UIUpdater.getStatusClass(status)}`;
-                statusElement.textContent = `${UIUpdater.getStatusIcon(status)} ${status}`;
-            }
-            
-            // Update data
-            const vehicle = currentData.offline.find(v => v['Vehicle Number'] === vehicleNumber);
-            if (vehicle) {
-                vehicle.Status = status;
-                vehicle.Remarks = reason || vehicle.Remarks;
-            }
-            
-            this.closeStatusModal();
-            
-        } catch (error) {
-            console.error('Status save failed:', error);
-            showError('Failed to save status');
-        }
-    }
-    
-    static addNewClient() {
-        document.getElementById('new-client-name').value = '';
-        document.getElementById('new-client-username').value = '';
-        document.getElementById('new-client-password').value = '';
-        document.getElementById('new-client-description').value = '';
-        document.getElementById('add-client-modal').style.display = 'flex';
-    }
-    
-    static closeAddClientModal() {
-        document.getElementById('add-client-modal').style.display = 'none';
-    }
-    
-    static async saveNewClient() {
-        const name = document.getElementById('new-client-name').value.trim();
-        const username = document.getElementById('new-client-username').value.trim().toLowerCase();
-        const password = document.getElementById('new-client-password').value;
-        
-        if (!name || !username || !password) {
-            showError('Please fill all required fields');
-            return;
-        }
-        
-        if (CONFIG.auth.clients[username]) {
-            CONFIG.auth.clients[username] = {
-                ...CONFIG.auth.clients[username],
-                password: password,
-                name: name,
-                aliases: CONFIG.auth.clients[username].aliases || [username, name.toLowerCase()]
-            };
-            showSuccess(`Client ${name} updated successfully!`);
-        } else {
-            CONFIG.auth.clients[username] = {
-                password: password,
-                name: name,
-                filter: username,
-                aliases: [username, name.toLowerCase()]
-            };
-            CONFIG.dynamicClients.add(username);
-            showSuccess(`Client ${name} added successfully!`);
-        }
-        
-        updateUserInfo();
-        ClientManager.updateClientTable();
-        this.closeAddClientModal();
-    }
-}
-
-console.log('G4S Fleet Management Dashboard - Ready for Authentication');;
         
         if (!vehicleNumber || !status) {
             NotificationManager.showError('Please fill required fields');
@@ -1951,6 +1814,59 @@ console.log('G4S Fleet Management Dashboard - Ready for Authentication');;
         } finally {
             UIManager.showLoading(false);
         }
+    }
+    
+    static addNewClient() {
+        // Clear form
+        document.getElementById('new-client-name').value = '';
+        document.getElementById('new-client-username').value = '';
+        document.getElementById('new-client-password').value = '';
+        document.getElementById('new-client-description').value = '';
+        
+        document.getElementById('add-client-modal').style.display = 'flex';
+    }
+    
+    static closeAddClientModal() {
+        document.getElementById('add-client-modal').style.display = 'none';
+    }
+    
+    static async saveNewClient() {
+        const name = document.getElementById('new-client-name').value.trim();
+        const username = document.getElementById('new-client-username').value.trim().toLowerCase();
+        const password = document.getElementById('new-client-password').value;
+        
+        if (!name || !username || !password) {
+            NotificationManager.showError('Please fill all required fields');
+            return;
+        }
+        
+        if (CONFIG.auth.clients[username]) {
+            // Update existing client
+            CONFIG.auth.clients[username] = {
+                ...CONFIG.auth.clients[username],
+                password: password,
+                name: name,
+                aliases: CONFIG.auth.clients[username].aliases || [username, name.toLowerCase()]
+            };
+            NotificationManager.showSuccess(`Client ${name} updated successfully!`);
+        } else {
+            // Add new client
+            CONFIG.auth.clients[username] = {
+                password: password,
+                name: name,
+                filter: username,
+                aliases: [username, name.toLowerCase()]
+            };
+            CONFIG.dynamicClients.add(username);
+            NotificationManager.showSuccess(`Client ${name} added successfully!`);
+        }
+        
+        // Update UI
+        DataManager.updateClientDropdown();
+        AuthManager.updateUserInfo();
+        ClientManager.updateClientTable();
+        
+        this.closeAddClientModal();
     }
 }
 
