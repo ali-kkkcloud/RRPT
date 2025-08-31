@@ -2237,14 +2237,6 @@ function setupEventListeners() {
     // Login form
     document.getElementById('login-form').addEventListener('submit', handleLogin);
     
-    // Login toggle buttons
-    document.querySelectorAll('.toggle-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-        });
-    });
-    
     // Navigation
     document.querySelectorAll('.nav-item[data-tab]').forEach(item => {
         item.addEventListener('click', () => {
@@ -2427,6 +2419,33 @@ function initializeWithSampleData() {
     
     // Update navigation badges
     DataManager.updateNavigationBadges();
+}
+
+// Toggle Login Mode Function (Global function for onclick)
+function switchLoginMode(mode, clickedButton) {
+    console.log(`🔄 Switching to ${mode} login mode`);
+    
+    // Remove active class from all toggle buttons
+    document.querySelectorAll('.toggle-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Add active class to clicked button
+    clickedButton.classList.add('active');
+    
+    // Update placeholder text based on mode
+    const usernameInput = document.getElementById('username');
+    const passwordInput = document.getElementById('password');
+    
+    if (mode === 'manager') {
+        usernameInput.placeholder = 'Manager Username';
+        passwordInput.placeholder = 'Manager Password';
+    } else {
+        usernameInput.placeholder = 'Client Username';
+        passwordInput.placeholder = 'Client Password';
+    }
+    
+    console.log(`✅ Login mode switched to: ${mode}`);
 }
 
 // Enhanced Error Handling
