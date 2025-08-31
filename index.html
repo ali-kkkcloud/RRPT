@@ -26,8 +26,8 @@
             </div>
             <div class="login-form">
                 <div class="login-toggle">
-                    <button class="toggle-btn active" data-mode="client">Client Login</button>
-                    <button class="toggle-btn" data-mode="manager">Manager Login</button>
+                    <button class="toggle-btn active" data-mode="client" onclick="switchLoginMode('client', this)">Client Login</button>
+                    <button class="toggle-btn" data-mode="manager" onclick="switchLoginMode('manager', this)">Manager Login</button>
                 </div>
                 <form id="login-form">
                     <div class="form-group">
